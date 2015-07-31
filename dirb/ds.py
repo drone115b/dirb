@@ -99,7 +99,7 @@ __class__.__base__.__subclasses__() if t.__name__ ==
   
     'ROOT' : [
         ['multiple', { 
-            'parameters' : ['department']
+            'key' : 'department'
             'bookmarks' : ['workarea'],
             'localattributes' : {},
             'treeattributes' : {},      
@@ -354,8 +354,8 @@ def compile_dir_structure( doc ):
 
 import collections
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
-PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections") ) # includes attrs and params from current level
-LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameters", "collection" )) # elements of current level only
+PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections") ) # includes attrs and params from current level # @@ should we include bookmarks too?
+LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection" )) # elements of current level only
 
 #
 # @@ ONE LAST TRAVERSAL FEATURE:
@@ -404,22 +404,30 @@ def _traverse( searcher, rule, ctx, ds ):
         collections = ictx.collections.copy() # shallow
         if levelparameter :
           basename = os.path.basename( dirname )
-          if levelparameter :
-            parameters[ levelparameter ] = basename
-            if levelcollection:
-              collections[ levelparameter ] = levelcollection
+          parameters[ levelparameter ] = basename
+          if levelcollection:
+            collections[ levelparameter ] = levelcollection
             
         newctx = PathTraversalContext( localattr, parameters, dirname, collections )
         test = searcher.does_intersect_path( newctx )
         if test:
-            searcher.test( newctx, levelctx )
-            newctx = PathTraversalContext( treeattr, parameters, dirname, collections ) # context that the children see & modify
-            passedlist.append( newctx )
+          searcher.test( newctx, levelctx )
+          newctx = PathTraversalContext( treeattr, parameters, dirname, collections ) # context that the children see & modify
+          passedlist.append( newctx )
         
       pathlist = passedlist
 
   return
   
+def _split_path( path ):
+  ret = []
+  head = path
+  tail = path
+  while tail :
+    head, tail = os.path.split( head )
+    if tail :
+      ret.insert( 0, tail )
+  return ret
 
 import pathexpr # @@ from . import pathexpr
 class LocalClient( object ) :
@@ -499,35 +507,25 @@ class LocalClient( object ) :
   
   def get_path_context( self, targetpath, startingpath ):
     "returns the path traversal context for the given path, works for real paths or depicted paths, will reject invalid paths, will accept paths deeper than what the structure knows about giving the deepest context it can"
-    
-    def split_path( path ):
-      ret = []
-      head = path
-      tail = path
-      while tail :
-        head, tail = os.path.split( head )
-        if tail :
-          ret.insert( 0, tail )
-      return ret
-    
     class SearcherPath( object ):
       def __init__( self, targetpath, ds ) :
-        self._splitpath = split_path( targetpath )
+        self._splitpath = _split_path( targetpath )
         self._lensplitpath = len( self._splitpath )
         self._store = {} # this keeps matches, indexed by their depths
         self._ds = ds
       def does_intersect_rule( self, rulectx ):
         return True
       def does_intersect_path( self, pathctx ):
-        testpath = split_path( pathctx.path )
+        testpath = _split_path( pathctx.path )
         lentestpath = len(testpath)
-        if lentestpath not in self._store :
+        lenpath = min( self._lensplitpath, lentestpath )
+        does_pass = self._splitpath[:lenpath] == testpath and lentestpath <= self._lensplitpath
+        if does_pass and lentestpath not in self._store :
           # when we reach a new depth, we create a new entry in our storage
           self._store[lentestpath] = []
-        lenpath = min( self._lensplitpath, lentestpath )
-        return self._splitpath[:lenpath] == testpath
+        return does_pass
       def test( self, pathctx, levelctx ):
-        testpath = split_path( pathctx.path )
+        testpath = _split_path( pathctx.path )
         lenpath = min( self._lensplitpath, len(testpath))
         if self._splitpath[:lenpath] == testpath[:lenpath] :
           # store hits at the depth they occur:
@@ -538,7 +536,7 @@ class LocalClient( object ) :
         # we get parameters from the path itself
         ret = set()
         for pathctx in pathctxlist :
-          testpath = split_path( pathctx.path )
+          testpath = _split_path( pathctx.path )
           lenpath = len(testpath)
           if self._lensplitpath > lenpath:
             ret.add( self._splitpath[lenpath] )
@@ -548,7 +546,7 @@ class LocalClient( object ) :
     ctx = PathTraversalContext( {}, {}, startingpath, {} )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     _traverse( searcher, rule, ctx, self )
-    ret = None
+    ret = ctx if targetpath == startingpath else None
     if searcher._store :
       # all depths in the traversal needed to have a match, otherwise the path was not valid for the directory structure:
       if all( searcher._store[i] for i in searcher._store ):
@@ -558,9 +556,15 @@ class LocalClient( object ) :
         ret = searcher._store[key][0]
     return ret
 
-  def get_frontier_parameters( self, targetpath, startingpath ): # @@ WIP
-    "returns the path traversal context for the given path"
+  def get_frontier_contexts( self, targetpath, startingpath ): # @@ WIP
+    """given an existing path, returns the 'next' parameter to be defined, as well as the paths to which that parameter leads.
+    necessary for UI development.
+    returns a dictionary where the key is the parameter name, and the value is the list of directories associated with that parameter
+    
     """
+    """
+    
+    implementation details:
     set of parameters:
     calculate extra parameters
     calculate missing parameters
@@ -569,31 +573,41 @@ class LocalClient( object ) :
     if there is zero extra parameters, then continue
     if there is more than one extra parameters, then cull the search
     
-    How do we handle the differences between searching a real path and searching a depicted path for frontier parameters?
     """
     class SearcherPath( object ):
-      def __init__( self, targetpath, ds ) :
-        self._splitpath = split_path( targetpath )
-        self._store = []
+      def __init__( self, targetctx, ds ) :
+        self._splitpath = _split_path( targetctx.path )
+        self._targetparam = set( targetctx.parameters.keys() )
+        self._lensplitpath = len( self._splitpath )
+        self._store = {}
         self._ds = ds
       def does_intersect_rule( self, rulectx ):
         return True
       def does_intersect_path( self, pathctx ):
-        testpath = split_path( pathctx.path )
-        lenpath = len(testpath)
-        return self._splitpath[:lenpath] == testpath
+        testpath = _split_path( pathctx.path )
+        lentestpath = len(testpath)
+        lenpath = min( self._lensplitpath, lentestpath )
+        extra_count = len( set( pathctx.parameters.keys() ) - self._targetparam )
+        return self._splitpath[:lenpath] == testpath[:lenpath] and extra_count < 2
       def test( self, pathctx, levelctx ):
-        
-        
-        
-        testpath = split_path( pathctx.path )
-        if testpath == self._splitpath :
-          self._store.append( pathctx )
+        path_set = set( pathctx.parameters.keys() )
+        extra_param = path_set - self._targetparam
+        extra_count = len( extra_param )
+        missing_count = len( self._targetparam - path_set )
+        testpath = _split_path( pathctx.path )
+        lenpath = min( self._lensplitpath, len(testpath))
+        if extra_count == 1 and ( not missing_count ) and levelctx.parameter:
+          key = extra_param.pop()
+          if not key in self._store:
+            self._store[key] = []
+          self._store[key].append( pathctx )
       def do_existing_paths( self ) :
         return True
       def get_parameters( self, key, levelctx, pathctxlist ):
         return None
-    searcher = SearcherPath( targetpath, self )
+
+    targetctx = self.get_path_context( targetpath, startingpath )
+    searcher = SearcherPath( targetctx, self )
     ctx = PathTraversalContext( {}, {}, startingpath, {} )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     _traverse( searcher, rule, ctx, self )  

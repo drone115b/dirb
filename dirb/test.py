@@ -272,12 +272,20 @@ class SimpleLocalClientTest(unittest.TestCase):
       '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/lighting',
       '/tmp/dirbtests/projects/SHOW/asset/TYPE/ASSET/lighting'))
     self.assertEquals( foundlist, expected )
-    
+  
   # ----------------------------------------
   def test_get_path_context_realpath( self ):
     targetpath = '/tmp/dirbtests/projects/show/asset/vehicle/car1/lighting'
     found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
     expected = set( {'dept': 'lighting', 'assettype': 'vehicle', 'asset': 'car1', 'show': 'show'}.items() )
+    self.assertEquals( found.path, targetpath )
+    self.assertEquals( set(found.parameters.items()), expected )
+    
+  # ----------------------------------------
+  def test_get_path_context_realpath2( self ):
+    targetpath = '/tmp/dirbtests/projects/show/sequence/bb'
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    expected = set( {'sequence': 'bb', 'show': 'show'}.items() )
     self.assertEquals( found.path, targetpath )
     self.assertEquals( set(found.parameters.items()), expected )
     
@@ -304,16 +312,58 @@ class SimpleLocalClientTest(unittest.TestCase):
     targetpath = '/tmp/dirbtests/projects/falseshow/asset/set/castle/infantry'
     # department value in this targetpath is not a member of the department collection
     self.assertRaises( KeyError, self.d.get_path_context, targetpath, "/tmp/dirbtests/projects" )
-
+  
   # ----------------------------------------
-  def test_get_path_context_notvalidpath( self ):
+  def test_get_path_context_shallow( self ):
     targetpath = '/tmp/dirbtests/projects/SHOW/editorial/workarea'
     # targetpath is not compatible with this directory structure
     found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
-    self.assertEquals( found, None )
+    self.assertEquals( found.path, '/tmp/dirbtests/projects/SHOW' )
     
-    ## @@ TBD
+  # ----------------------------------------
+  def test_get_path_context_notvalidpath( self ):
+    targetpath = '/tmp/dirbtests/thing/SHOW'
+    # targetpath is not compatible with this directory structure
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    self.assertEquals( found, None )
+  
+  # ----------------------------------------
+  def test_get_frontier_contexts_root( self ):
+    targetpath = '/tmp/dirbtests/projects'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    expected_keys = ["show"]
+    expected_parameters = {'show':'show'}
+    self.assertEquals( found.keys(), expected_keys )
+    self.assertEquals( len( found['show'] ), 1 )
+    self.assertEquals( found['show'][0].parameters, expected_parameters )
+    
+  # ----------------------------------------
+  def test_get_frontier_contexts_cluster( self ):
+    targetpath = '/tmp/dirbtests/projects/show/sequence'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    expected_keys = ["sequence"]
+    expected_parameters = set(['aa','bb','cc'])
+    self.assertEquals( found.keys(), expected_keys )
+    self.assertEquals( len( found['sequence'] ), len(expected_parameters) )
+    found_parameters = set( i.parameters['sequence'] for i in found['sequence'] )
+    self.assertEquals( set(found_parameters), expected_parameters )
 
+  # ----------------------------------------
+  def test_get_frontier_contexts_branch( self ):
+    targetpath = '/tmp/dirbtests/projects/show'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    expected_keys = set(["sequence",'assettype'])
+    expected_parameters = set(['aa','bb','cc'])
+    self.assertEquals( set(found.keys()), expected_keys )
+    self.assertEquals( len( found['sequence'] ), len(expected_parameters) )
+    found_parameters = set( i.parameters['sequence'] for i in found['sequence'] )
+    self.assertEquals( set(found_parameters), expected_parameters )
+    
+    expected_parameters = set(['vehicle'])
+    self.assertEquals( len( found['assettype'] ), len(expected_parameters) )
+    found_parameters = set( i.parameters['assettype'] for i in found['assettype'] )
+    self.assertEquals( set(found_parameters), expected_parameters )
+    
   # ----------------------------------------
   def tearDown(self):
     # @@ should we remove the directories we created?
