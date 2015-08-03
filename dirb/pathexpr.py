@@ -18,8 +18,7 @@
 
 import itertools
 
-# from . import sexpr # @@
-import sexpr
+from . import sexpr
 
 # this implements the filter expression used by LocalClient.search_paths() 
 

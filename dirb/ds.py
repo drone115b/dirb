@@ -16,7 +16,17 @@
 # 
 #####################################################################
 
-#
+from . import pathexpr
+from . import fs
+
+import copy
+import collections
+import itertools
+import os
+import glob
+
+
+
 # A directory structure object:
 #
 # (1) has a schema,
@@ -85,6 +95,10 @@ __class__.__base__.__subclasses__() if t.__name__ ==
 #
 # exclude expressions that include double-underscore??
 
+
+
+
+
 # before being compiled:
 """
 
@@ -137,9 +151,7 @@ Directory level types:
      fields : bookmarks, local attrs, tree attrs, key, collection,
      if there is an collection attribute, then the values are restricted.
 """
-import itertools
-import os
-import glob
+
 FnLevel = {} # use of a singleton impairs ability to run multi-threaded, locks should be placed inside the level methods that need them.
 
 # we use a class decorator here, instead of metaclasses for example,
@@ -154,11 +166,11 @@ class BaseLevel(object):
   def __init__(self):
     pass
   
-  def validate( self, levelfields, path_list, ds ): # for use during compile (?)
+  def validate( self, levelfields, path_list, client ): # for use during compile (?)
     ## TBD
     return True
   
-  def get_directories( self, levelctx, levelfields, searcher, ctxlist, ds ):
+  def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):
     return []
   
   def get_bookmarks( self, levelfields, doc ): # used during compile
@@ -179,7 +191,7 @@ class FixedLevel(BaseLevel) :
   def __init__(self):
     BaseLevel.__init__(self) # can't use super() because we instance the class before definition is complete!
   
-  def get_directories( self, levelctx, levelfields, searcher, ctxlist, ds ):
+  def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):
     candidates = [(x, os.path.join(x.path, levelfields['name'])) for x in ctxlist]
     if searcher.do_existing_paths() :
       candidates = [(x, y) for x, y in candidates if os.path.isdir(y)]
@@ -193,11 +205,11 @@ class BranchLevel(BaseLevel) :
   def __init__(self):
    BaseLevel.__init__(self) # can't use super() because we instance the class before definition is complete!
   
-  def get_directories( self, levelctx, levelfields, searcher, ctxlist, ds):
+  def get_directories( self, levelctx, levelfields, searcher, ctxlist, client):
     rulenames = levelfields['rules']
     for rulename, ctx in itertools.product( rulenames, ctxlist ) :
-      rule = ds.get_rule( rulename )
-      _traverse( searcher, rule, ctx, ds ) # indirect recursion
+      rule = client.get_rule( rulename )
+      _traverse( searcher, rule, ctx, client ) # indirect recursion
     return None
   
   def get_bookmarks( self, levelfields, doc ):
@@ -231,7 +243,7 @@ class ParameterizedLevel(BaseLevel) :
   def __init__(self):
     BaseLevel.__init__(self) # can't use super() because we instance the class before definition is complete!
   
-  def get_directories( self, levelctx, levelfields, searcher, ctxlist, ds ):
+  def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):
     doexisting = searcher.do_existing_paths()
     dirlist = []
     
@@ -242,7 +254,7 @@ class ParameterizedLevel(BaseLevel) :
         ctxdirs = ( x for x in ctxdirs if os.path.isdir( x ))
         
         if 'collection' in levelfields:
-          coll = ds.get_collection( levelfields['collection'] )
+          coll = client.get_collection( levelfields['collection'] )
           ctxdirs = ( x for x in ctxdirs if os.path.split(x)[-1] in coll )
           
         dirlist.extend( (ictx, x) for x in ctxdirs )
@@ -256,7 +268,7 @@ class ParameterizedLevel(BaseLevel) :
           values.extend( x for x in search_param if x ) # eliminate None values
           
       if 'collection' in levelfields:
-        coll = ds.get_collection( levelfields['collection'] )
+        coll = client.get_collection( levelfields['collection'] )
         bad_values = [x for x in values if x not in coll]
         if bad_values:
           raise KeyError( "Collection '%s' does not contain %s" % (levelfields['collection'], ','.join("'%s'" % x for x in bad_values)))
@@ -291,68 +303,10 @@ def get_rule_parameters( levellist, doc ): # used during compile
     levelfields = level[1]
     ret |= FnLevel[leveltype].get_parameters( levelfields, doc)
   return ret  
-  
-"""
-a rule is a list of directory levels.
-a compiled rule has:
-   a set of bookmarks under it
-   a set of parameters under it
-   a set of attributes under it
-
-Directory level types:
-  fixed : one or more fixed names, not parameterized
-     fields : bookmarks, local attrs, tree attrs, name
-  branch : redirects to one or more other rules, IN ORDER, no special attributes of its own
-     fields: rules
-  parameterized : any number of parameterized directories, there is one key and potentially many values.
-     fields : bookmarks, local attrs, tree attrs, key, collection,
-     if there is an collection attribute, then the values are restricted.
-     """
-import copy
-def compile_dir_structure( doc ):
-    "returns a compiled version of the input document"
-    ret ={ 'globals': {}, 'collections':{}, 'rules':{} }
-    # copy globals:
-    if 'globals' in doc:
-      ret['globals'] = copy.deepcopy( doc['globals'] )
-    # copy collections:
-    if 'collections' in doc:
-      ret['collections'] = copy.deepcopy( doc['collections'] )
-    # copy rules:
-    if 'rules' in doc:
-      # a document rule is a key-value pair
-      #    name of the rule is the key
-      #    list of levels is the value.
-      for rulename in doc['rules']:
-        levellist = doc['rules'][rulename]
-        ret['rules'][rulename] = {
-          'levels' : copy.deepcopy( levellist ),
-          'bookmarks' : tuple(get_rule_bookmarks(levellist, doc)),
-          'parameters' : tuple(get_rule_parameters(levellist, doc)),
-          'attributes' : tuple(get_rule_attributes(levellist, doc))
-          }
-    return ret
-
-# -----------
-
-# a compiledrule is a dictionary with fields:
-#    "bookmarks": set of bookmarks (under it)
-#    "parameters" : set of parameters (keys only) (under it) 
-#    "attributes" : set of attributes (keys only) (under it)
-#    "levels" : tuples of tuples, (( "leveltype", {<levelfields>}),( "leveltype", {<levelfields>}),etc)
-#    as traversal occurs, the bookmarks, parameter, attributes move from rules to the contexts as they resolve.
-#
-
-#
-# A searcher has :
-# does_intersect_rule( self, rulectx ) return bool if the rule might contain our target
-# does_intersect_path( self, pathctx ) returns bool if the path might contain our target
-# test( self, pathctx, levelctx ) to detemine whether this level is our target
-# do_existing_paths() : bool, are we traversing real directories on disk, or is this theoretical?
-# get_parameters( self, key, levelctx, pathctxlist ) : if this is a theoretical traversal, then the searcher needs to supply possible values, for each parameter key, to advance the search.
 
 
-import collections
+
+
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
 PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections") ) # includes attrs and params from current level # @@ should we include bookmarks too?
 LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection" )) # elements of current level only
@@ -365,15 +319,11 @@ LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "book
 #
 
 
-def _traverse( searcher, rule, ctx, ds ):
+def _traverse( searcher, rule, ctx, client ):
   if searcher.does_intersect_rule( RuleTraversalContext( rule['bookmarks'], rule['attributes'], rule['parameters'] ) ):
     
     pathlist = [ctx]
-    for level in rule[ 'levels' ]:
-      
-      # acquire level information:
-      leveltype = level[0]
-      levelfields = level[1]
+    for leveltype, levelfields in rule[ 'levels' ]:
       
       # create new level context:
       levelbookmarks = levelfields['bookmarks'] if 'bookmarks' in levelfields else []
@@ -384,7 +334,7 @@ def _traverse( searcher, rule, ctx, ds ):
       levelctx = LevelTraversalContext( levelbookmarks, leveltreeattr, levellocalattr, levelparameter, levelcollection )
       
       # get directories for this level
-      ruletuples = FnLevel[ leveltype ].get_directories( levelctx, levelfields, searcher, pathlist, ds )
+      ruletuples = FnLevel[ leveltype ].get_directories( levelctx, levelfields, searcher, pathlist, client )
       
       if not ruletuples:
         break # end for
@@ -418,257 +368,47 @@ def _traverse( searcher, rule, ctx, ds ):
       pathlist = passedlist
 
   return
-  
-def _split_path( path ):
-  ret = []
-  head = path
-  tail = path
-  while tail :
-    head, tail = os.path.split( head )
-    if tail :
-      ret.insert( 0, tail )
-  return ret
 
-import pathexpr # @@ from . import pathexpr
-class LocalClient( object ) :
-  def __init__(self, compileddoc ):
-    self._doc = compileddoc
+  
+"""
+a rule is a list of directory levels.
+a compiled rule has:
+   a set of bookmarks under it
+   a set of parameters under it
+   a set of attributes under it
 
-  def get_rule_names( self ):
-    return self._doc['rules'].keys()
-  
-  def get_rule( self, rulename ): # advanced API, not necessarily public; returns compiled rule
-    return self._doc['rules'][rulename] if rulename in self._doc['rules'] else None
-  
-  def get_collection_names( self ):
-    return self._doc['collections'].keys()
-  
-  def get_collection( self, collectionname ) : 
-    return self._doc['collections'][collectionname] if collectionname in self._doc['collections'] else None
-  
-  def get_global_names( self ):
-    return self._doc['globals'].keys()
-  
-  def get_global( self, attrname ):
-    return self._doc['globals'][attrname] if attrname in self._doc['globals'] else None
+Directory level types:
+  fixed : one or more fixed names, not parameterized
+     fields : bookmarks, local attrs, tree attrs, name
+  branch : redirects to one or more other rules, IN ORDER, no special attributes of its own
+     fields: rules
+  parameterized : any number of parameterized directories, there is one key and potentially many values.
+     fields : bookmarks, local attrs, tree attrs, key, collection,
+     if there is an collection attribute, then the values are restricted.
+     """
 
-  def traverse( self, searcher, startingpath ): # advanced API, not necessarily public
-    ctx = PathTraversalContext( {}, {}, startingpath, {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    ds = self
-    return _traverse( searcher, rule, ctx, ds )
-  
-  def get_bookmark_names( self ) :
-    return self._doc['rules']['ROOT']['bookmarks']
-  
-  def get_bookmark_parameters( self, bookmark ):
-    """returns the parameters required to find the bookmark.  A list of dictionaries.  Each dictionary is a set of parameters required to find the bookmark.  The key is the parameter name and the value determines which, if any, collection the parameter is associated with."""
-    class SearcherBookmarks( object ):
-      def __init__( self, ds ) :
-        self._store = []
-        self._ds = ds
-      def does_intersect_rule( self, rulectx ):
-        return bookmark in rulectx.bookmarks
-      def does_intersect_path( self, pathctx ):
-        return True
-      def test( self, pathctx, levelctx ):
-        if bookmark in levelctx.bookmarks:
-          found = ( (x,None) if x not in pathctx.collections else (x,pathctx.collections[x]) for x in pathctx.parameters.keys() )
-          self._store.append( dict(found) )
-      def do_existing_paths( self ) :
-        return False
-      def get_parameters( self, key, levelctx, pathctxlist ):
-        if levelctx.collection:
-          coll = self._ds.get_collection( levelctx.collection )
-          return (coll[0],)
-        else:
-          return ('X',)
-    searcher = SearcherBookmarks( self )
-    ctx = PathTraversalContext( {}, {}, '', {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    _traverse( searcher, rule, ctx, self )  
-    return searcher._store
-  
-  def search_paths( self, searchexpr, startingpath ):
-    """implies a query, with a specific predicate or filter to narrow the search, returns only paths that exist"""
-    searcher = pathexpr.SearcherExists( self, searchexpr )
-    ctx = PathTraversalContext( {}, {}, startingpath, {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    _traverse( searcher, rule, ctx, self )  
-    return searcher._store
-  
-  def depict_paths( self, createexpr, startingpath ):
-    "this returns a not-exists path, but does not make a directory on disk"
-    searcher = pathexpr.SearcherNotExists( self, createexpr )
-    ctx = PathTraversalContext( {}, {}, startingpath, {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    _traverse( searcher, rule, ctx, self )  
-    return searcher._store
-  
-  def get_path_context( self, targetpath, startingpath ):
-    "returns the path traversal context for the given path, works for real paths or depicted paths, will reject invalid paths, will accept paths deeper than what the structure knows about giving the deepest context it can"
-    class SearcherPath( object ):
-      def __init__( self, targetpath, ds ) :
-        self._splitpath = _split_path( targetpath )
-        self._lensplitpath = len( self._splitpath )
-        self._store = {} # this keeps matches, indexed by their depths
-        self._ds = ds
-      def does_intersect_rule( self, rulectx ):
-        return True
-      def does_intersect_path( self, pathctx ):
-        testpath = _split_path( pathctx.path )
-        lentestpath = len(testpath)
-        lenpath = min( self._lensplitpath, lentestpath )
-        does_pass = self._splitpath[:lenpath] == testpath and lentestpath <= self._lensplitpath
-        if does_pass and lentestpath not in self._store :
-          # when we reach a new depth, we create a new entry in our storage
-          self._store[lentestpath] = []
-        return does_pass
-      def test( self, pathctx, levelctx ):
-        testpath = _split_path( pathctx.path )
-        lenpath = min( self._lensplitpath, len(testpath))
-        if self._splitpath[:lenpath] == testpath[:lenpath] :
-          # store hits at the depth they occur:
-          self._store[lenpath].append( pathctx )
-      def do_existing_paths( self ) :
-        return False
-      def get_parameters( self, key, levelctx, pathctxlist ):
-        # we get parameters from the path itself
-        ret = set()
-        for pathctx in pathctxlist :
-          testpath = _split_path( pathctx.path )
-          lenpath = len(testpath)
-          if self._lensplitpath > lenpath:
-            ret.add( self._splitpath[lenpath] )
-        return ret
-      
-    searcher = SearcherPath( targetpath, self )
-    ctx = PathTraversalContext( {}, {}, startingpath, {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    _traverse( searcher, rule, ctx, self )
-    ret = ctx if targetpath == startingpath else None
-    if searcher._store :
-      # all depths in the traversal needed to have a match, otherwise the path was not valid for the directory structure:
-      if all( searcher._store[i] for i in searcher._store ):
-        # we want to return the deepest match:
-        key = max( searcher._store.keys() )
-        assert 1 == len(searcher._store[key]), "Multiple targets found for single path (%s)" % targetpath
-        ret = searcher._store[key][0]
+def compile_dir_structure( doc ):
+    "returns a compiled version of the input document"
+    ret ={ 'globals': {}, 'collections':{}, 'rules':{} }
+    # copy globals:
+    if 'globals' in doc:
+      ret['globals'] = copy.deepcopy( doc['globals'] )
+    # copy collections:
+    if 'collections' in doc:
+      ret['collections'] = copy.deepcopy( doc['collections'] )
+    # copy rules:
+    if 'rules' in doc:
+      # a document rule is a key-value pair
+      #    name of the rule is the key
+      #    list of levels is the value.
+      for rulename in doc['rules']:
+        levellist = doc['rules'][rulename]
+        ret['rules'][rulename] = {
+          'levels' : copy.deepcopy( levellist ),
+          'bookmarks' : tuple(get_rule_bookmarks(levellist, doc)),
+          'parameters' : tuple(get_rule_parameters(levellist, doc)),
+          'attributes' : tuple(get_rule_attributes(levellist, doc))
+          }
     return ret
 
-  def get_frontier_contexts( self, targetpath, startingpath ): # @@ WIP
-    """given an existing path, returns the 'next' parameter to be defined, as well as the paths to which that parameter leads.
-    necessary for UI development.
-    returns a dictionary where the key is the parameter name, and the value is the list of directories associated with that parameter
-    
-    """
-    """
-    
-    implementation details:
-    set of parameters:
-    calculate extra parameters
-    calculate missing parameters
-    if there are missing parameters, then cull the search
-    if there is one extra parameter, then add it to the hits
-    if there is zero extra parameters, then continue
-    if there is more than one extra parameters, then cull the search
-    
-    """
-    class SearcherPath( object ):
-      def __init__( self, targetctx, ds ) :
-        self._splitpath = _split_path( targetctx.path )
-        self._targetparam = set( targetctx.parameters.keys() )
-        self._lensplitpath = len( self._splitpath )
-        self._store = {}
-        self._ds = ds
-      def does_intersect_rule( self, rulectx ):
-        return True
-      def does_intersect_path( self, pathctx ):
-        testpath = _split_path( pathctx.path )
-        lentestpath = len(testpath)
-        lenpath = min( self._lensplitpath, lentestpath )
-        extra_count = len( set( pathctx.parameters.keys() ) - self._targetparam )
-        return self._splitpath[:lenpath] == testpath[:lenpath] and extra_count < 2
-      def test( self, pathctx, levelctx ):
-        path_set = set( pathctx.parameters.keys() )
-        extra_param = path_set - self._targetparam
-        extra_count = len( extra_param )
-        missing_count = len( self._targetparam - path_set )
-        testpath = _split_path( pathctx.path )
-        lenpath = min( self._lensplitpath, len(testpath))
-        if extra_count == 1 and ( not missing_count ) and levelctx.parameter:
-          key = extra_param.pop()
-          if not key in self._store:
-            self._store[key] = []
-          self._store[key].append( pathctx )
-      def do_existing_paths( self ) :
-        return True
-      def get_parameters( self, key, levelctx, pathctxlist ):
-        return None
-
-    targetctx = self.get_path_context( targetpath, startingpath )
-    searcher = SearcherPath( targetctx, self )
-    ctx = PathTraversalContext( {}, {}, startingpath, {} )
-    rule = self._doc[ 'rules' ][ 'ROOT' ]
-    _traverse( searcher, rule, ctx, self )  
-    return searcher._store
-
-"""
-  
-
-    get_frontier_parameters( filter/predicate, parameters, startingpath, starting rule='ROOT' )
-    # if the parameters values stop immediately at a location, then list parameters needed to traverse further.
-    # if a location is reached, but there are more parameters to be used, then do not list the location.
-    # predicate allows the traversal (from the very beginning) to prune areas not of interest
-    # this is essentially how you implement a navigation UI utop an abstracted directory structure
-    
-    
-    get_frontier_parameters(root_dir, directory_structure, nav_params={}, skip_params=[], skip_tags=[]):
-    
-    
-
-    predicate language:
-      ["parameters", {'show':'exp1','shot':thing,'department':thing}]
-      ["parameters-match", {'show':'dom*'}] # use fnmatch?
-      ["attributes", {'smell':'stinky'}]   # ATTRIBUTES PREDICATES ONLY WORK IF THE ATTRIBUTE IS A STRICT KEY-VALUE PAIR!
-      ["attributes-match", {'show':'dom*'}] # a has-attributes operations may be ['attributes-match', {'key':'*'} ]  # ATTRIBUTES PREDICATES ONLY WORK IF THE ATTRIBUTE IS A STRICT KEY-VALUE PAIR!
-      ['attributes-below', ['key','key']]
-      ["bookmarks", ["shot"]]
-      ['bookmarks-above', [value,value]]
-      ['bookmarks-below', [value,value]]
-      ["and", [subpredicate, subpredicate]]
-      ["or", [subpredicate, subpredicate]]
-      ['not', subpredicate]
-      ['pass' ] # return true for everything!
-      
-      
-      ['and', ['not', 'bookmarks', ['shot']], ['not', 'above-bookmarks', ['shot']]] # predicate to prune paths not leading to a shot
-      
-      
-      ['and', ['bookmarks',['shot']], ['parameters', {}]]
-      
-      
-import re
-
-_security_concerns = (
-    re.compile( "\.(\s)*_" ), # reference a protected member
-    re.compile( "__" ), # reference a private member
-)
-
-def _safe_eval( expr, env ):
-  "Not exactly the safest in the world, but if you fear malicious attacks, then this is probably not the product for you"
-  if any( x.search(expr) for x in _security_concerns ):
-    raise LookupError, "Potential security violation in expression (%s), aborted" % expr
-  else:
-    return eval( expr, { '__builtins__' : None }, env )
-
-
-We should have a "system lock" where root can create (and own) a file of a given name
-(how about "_sys_lock_" and dirb will not create directories underneath that level.
-Do we need a "_read_lock_" to prevent reads below a certain level?  Does that mean
-we need a "_read_lock_" and "_write_lock_" ??
-      
-Eliminate the capability of one directory being parameterized two different ways.  One directory, one key only.
-      
-      """
-      
+# -----------
