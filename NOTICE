@@ -1,0 +1,10 @@
+dirb Copyright 2015 by Mayur Patel
+
+wsgi_xmlrpc module originally authored by 
+    mikeal.rogers@gmail.com
+    https://code.google.com/p/wsgi-xmlrpc/
+    2008-2009 under Apache 2.0 License
+    
+    This project has been forked for cog to advance python 3.x support.
+    (Original author has not responded to a request to merge back
+    changes for >3 years so we assume he's abandoned it.)
