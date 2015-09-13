@@ -36,7 +36,7 @@ def loads(sexp):
         elif term == 's':
             out.append(value)
         else:
-            raise NotImplementedError("Error: %r" % (term, value))
+            raise NotImplementedError("Error in s-expression: %r" % (term, value))
     if stack:
       raise SyntaxError( "Bad nesting in s-expression: %s" % sexp )
     return out[0]

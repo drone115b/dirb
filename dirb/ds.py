@@ -150,6 +150,10 @@ Directory level types:
   parameterized : any number of parameterized directories, there is one key and potentially many values.
      fields : bookmarks, local attrs, tree attrs, key, collection,
      if there is an collection attribute, then the values are restricted.
+  regex : can represent zero or more parameters, as defined by the groups in the expression.  Also good when
+     there is a prefix or suffix or restrictions on the character set.
+     fields: bookmarks, local attrs, tree attrs, pattern, collections
+     regex is TODO
 """
 
 FnLevel = {} # use of a singleton impairs ability to run multi-threaded, locks should be placed inside the level methods that need them.
@@ -167,7 +171,7 @@ class BaseLevel(object):
     pass
   
   def validate( self, levelfields, path_list, client ): # for use during compile (?)
-    ## TBD
+    ## @@ TBD
     return True
   
   def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):

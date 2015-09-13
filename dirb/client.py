@@ -165,7 +165,7 @@ class LocalClient( object ) :
         ret = searcher._store[key][0]
     return ret
 
-  def get_frontier_contexts( self, targetpath, startingpath ): # @@ WIP
+  def get_frontier_contexts( self, targetpath, startingpath ):
     """given an existing path, returns the 'next' parameter to be defined, as well as the paths to which that parameter leads.
     necessary for UI development.
     returns a dictionary where the key is the parameter name, and the value is the list of directories associated with that parameter
