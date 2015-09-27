@@ -17,6 +17,7 @@
 #####################################################################
 
 import itertools
+import functools 
 
 from . import sexpr
 
@@ -163,10 +164,10 @@ def _create_pcollector_and( slist ):
   def _combine( *args ):
     "and operation amongst parameter dictionaries"
     ret = {}
-    keys = reduce( lambda x, y : x & y, (set(x.keys()) for x in args))
+    keys = functools.reduce( lambda x, y : x & y, (set(x.keys()) for x in args))
     for key in keys:
       values = ( x[key] for x in args if key in x )
-      ret[key] = reduce( lambda x, y : x & y, (set(x) for x in values))
+      ret[key] = functools.reduce( lambda x, y : x & y, (set(x) for x in values))
     return ret
   parameters = [create_parameter_collect( x ) for x in slist[1:]]
   parameters = [x for x in parameters if x is not None]

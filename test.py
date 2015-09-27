@@ -19,7 +19,7 @@
 #####################################################################
 
 import dirb.ds as ds
-import dirb.client as client
+import dirb.localclient as localclient
 import dirb.sexpr as sexpr
 import dirb.pathexpr as pathexpr
 
@@ -31,20 +31,20 @@ class SimpleSexprTest(unittest.TestCase):
   # ----------------------------------------
   def test_identity( self ):
     e = "( and  (bookmark alpha) (parameter (key value) (key value) (key value)) )"
-    self.assertEquals( sexpr.loads( e ), sexpr.loads(sexpr.dumps( sexpr.loads( e )))  )
-    self.assertEquals( sexpr.loads( e ), ['and', ['bookmark', 'alpha'], ['parameter', ['key','value'], ['key','value'],['key','value']]]  )
+    self.assertEqual( sexpr.loads( e ), sexpr.loads(sexpr.dumps( sexpr.loads( e )))  )
+    self.assertEqual( sexpr.loads( e ), ['and', ['bookmark', 'alpha'], ['parameter', ['key','value'], ['key','value'],['key','value']]]  )
 
   def test_escape_bracket( self ):
     e = r'("(name)" in bracket)'
-    self.assertEquals( sexpr.loads( e ), ['(name)', 'in', 'bracket'] )
+    self.assertEqual( sexpr.loads( e ), ['(name)', 'in', 'bracket'] )
     
   def test_bracket( self ):
     e = r'(\(name\) in bracket)'
-    self.assertEquals( sexpr.loads( e ), ['\\', ['name\\'], 'in', 'bracket'] )
+    self.assertEqual( sexpr.loads( e ), ['\\', ['name\\'], 'in', 'bracket'] )
   
   def test_quote( self ):
     e = '("(name) (value)\"\"" token2)'
-    self.assertEquals( sexpr.loads( e ), ['(name) (value)\"\"', 'token2'] )
+    self.assertEqual( sexpr.loads( e ), ['(name) (value)\"\"', 'token2'] )
           
 # ==========================================
 # /<show>/sequence/<sequence>/<shot>/<dept>
@@ -53,22 +53,22 @@ class SimpleLocalClientTest(unittest.TestCase):
 
   def setUp(self):
     self.dirlist = (
-      '/tmp/dirbtests/projects/',
-      '/tmp/dirbtests/projects/show',
-      '/tmp/dirbtests/projects/show/asset',
-      '/tmp/dirbtests/projects/show/asset/vehicle',
-      '/tmp/dirbtests/projects/show/asset/vehicle/car1',
-      '/tmp/dirbtests/projects/show/asset/vehicle/car1/lighting',
-      '/tmp/dirbtests/projects/show/sequence',
-      '/tmp/dirbtests/projects/show/sequence/aa',
-      '/tmp/dirbtests/projects/show/sequence/aa/xx',
-      '/tmp/dirbtests/projects/show/sequence/bb',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/animation',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/lighting',
-      '/tmp/dirbtests/projects/show/sequence/bb/yy',
-      '/tmp/dirbtests/projects/show/sequence/bb/zz',
-      '/tmp/dirbtests/projects/show/sequence/cc'
+      '/tmp/dirbtest1/projects/',
+      '/tmp/dirbtest1/projects/show',
+      '/tmp/dirbtest1/projects/show/asset',
+      '/tmp/dirbtest1/projects/show/asset/vehicle',
+      '/tmp/dirbtest1/projects/show/asset/vehicle/car1',
+      '/tmp/dirbtest1/projects/show/asset/vehicle/car1/lighting',
+      '/tmp/dirbtest1/projects/show/sequence',
+      '/tmp/dirbtest1/projects/show/sequence/aa',
+      '/tmp/dirbtest1/projects/show/sequence/aa/xx',
+      '/tmp/dirbtest1/projects/show/sequence/bb',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/animation',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/lighting',
+      '/tmp/dirbtest1/projects/show/sequence/bb/yy',
+      '/tmp/dirbtest1/projects/show/sequence/bb/zz',
+      '/tmp/dirbtest1/projects/show/sequence/cc'
       )
     self.doc = ds.compile_dir_structure( { 
       'collections' : {"department":["animation","lighting"], "app":['katana','maya']},
@@ -96,7 +96,7 @@ class SimpleLocalClientTest(unittest.TestCase):
             ]
         }
     } )
-    self.d = client.LocalClient( self.doc )
+    self.d = localclient.LocalClient( self.doc )
     for d in self.dirlist:
       if not os.path.isdir( d ):
         os.makedirs( d )
@@ -134,125 +134,127 @@ class SimpleLocalClientTest(unittest.TestCase):
         return []
       
     s = ShotSearcher()
-    self.d.traverse( s, '/tmp/dirbtests/projects' )
-    self.assertEqual(s.hold, ['/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT'])
+    self.d.traverse( s, '/tmp/dirbtest1/projects' )
+    self.assertEqual(s.hold, ['/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT'])
     
   # ----------------------------------------
   def test_bookmark_names(self):
     bookmarks = set( self.d.get_bookmark_names() )
     expected = set(('showroot','shotroot','assetroot','workarea'))
-    self.assertEquals(bookmarks, expected)
+    self.assertEqual(bookmarks, expected)
 
   # ----------------------------------------
   def test_bookmark_parameters(self):
-    found = sorted(self.d.get_bookmark_parameters('workarea'))
-    expected = sorted([{'dept': 'department', 'show': None, 'shot': None, 'sequence': None}, {'dept': 'department', 'show': None, 'asset': None, 'assettype': None}])
-    self.assertEquals(found, expected)
+    found = self.d.get_bookmark_parameters('workarea')
+    found = sorted( [ sorted(x.items()) for x in found ] )
+    expected = [{'dept': 'department', 'show': None, 'shot': None, 'sequence': None}, {'dept': 'department', 'show': None, 'asset': None, 'assettype': None}]
+    expected = sorted( [ sorted( x.items() ) for x in expected ] )
+    self.assertEqual(found, expected)
     
   # ----------------------------------------
   def test_search_paths_and(self):
     searchexpr = '(and (bookmark shotroot) (parameters (show show)(shot xx)(sequence bb)))'
-    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtests/projects")
-    self.assertEquals( len(foundlist), 1 )
+    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtest1/projects")
+    self.assertEqual( len(foundlist), 1 )
     pathctx = foundlist[0]
-    self.assertEquals( pathctx.path, '/tmp/dirbtests/projects/show/sequence/bb/xx' )
-    self.assertEquals( pathctx.parameters, {'show': 'show', 'shot': 'xx', 'sequence': 'bb'} )
+    self.assertEqual( pathctx.path, '/tmp/dirbtest1/projects/show/sequence/bb/xx' )
+    self.assertEqual( pathctx.parameters, {'show': 'show', 'shot': 'xx', 'sequence': 'bb'} )
     
   # ----------------------------------------
   def test_search_paths_multifinder_parameters(self):
     searchexpr = '(parameters (show show)(shot xx)(sequence bb))'
-    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/animation', 
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/lighting', 
-      '/tmp/dirbtests/projects/show/sequence/bb/xx', 
-      '/tmp/dirbtests/projects/show/sequence/bb', 
-      '/tmp/dirbtests/projects/show/sequence', 
-      '/tmp/dirbtests/projects/show' ))
-    self.assertEquals( foundlist, expected )
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/animation', 
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/lighting', 
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx', 
+      '/tmp/dirbtest1/projects/show/sequence/bb', 
+      '/tmp/dirbtest1/projects/show/sequence', 
+      '/tmp/dirbtest1/projects/show' ))
+    self.assertEqual( foundlist, expected )
 
   # ----------------------------------------
   def test_search_paths_andor(self):
     searchexpr = '(and (bookmark workarea) (or (parameters (sequence bb))(parameters (asset car1))))'
-    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/show/asset/vehicle/car1/lighting',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/animation',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx/lighting'))
-    self.assertEquals( foundlist, expected )
+      '/tmp/dirbtest1/projects/show/asset/vehicle/car1/lighting',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/animation',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/lighting'))
+    self.assertEqual( foundlist, expected )
   
   # ----------------------------------------
   def test_search_paths_multifinder_bookmarks(self):
     searchexpr = '(bookmark shotroot)'
-    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.search_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/show/sequence/aa/xx',
-      '/tmp/dirbtests/projects/show/sequence/bb/xx',
-      '/tmp/dirbtests/projects/show/sequence/bb/yy',
-      '/tmp/dirbtests/projects/show/sequence/bb/zz'))
-    self.assertEquals( foundlist, expected )
+      '/tmp/dirbtest1/projects/show/sequence/aa/xx',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx',
+      '/tmp/dirbtest1/projects/show/sequence/bb/yy',
+      '/tmp/dirbtest1/projects/show/sequence/bb/zz'))
+    self.assertEqual( foundlist, expected )
     
   # ----------------------------------------
   def test_parameter_collect_parameter(self):
     found = pathexpr.create_parameter_collect( sexpr.loads( "(parameters (key1 value1) (key2 value2))" ))
     expected = {'key2': ('value2',), 'key1': ('value1',)}
-    self.assertEquals( found, expected )
+    self.assertEqual( found, expected )
     
   # ----------------------------------------
   def test_parameter_collect_and(self):
     found = pathexpr.create_parameter_collect( sexpr.loads( "(and (parameters (key1 value1)) (parameters (key1 value1) (key2 value2)))" ))
-    self.assertEquals( set(found['key1']), set(('value1',)) )
-    self.assertEquals( set(found.keys()), set(('key1',)) )
+    self.assertEqual( set(found['key1']), set(('value1',)) )
+    self.assertEqual( set(found.keys()), set(('key1',)) )
     
   # ----------------------------------------
   def test_parameter_collect_or(self):
     found = pathexpr.create_parameter_collect( sexpr.loads( "(or (parameters (key1 value1)) (parameters (key2 value2)))" ))
-    self.assertEquals( set(found['key1']), set(('value1',)) )
-    self.assertEquals( set(found['key2']), set(('value2',)) )
-    self.assertEquals( set(found.keys()), set(('key1','key2')) )
+    self.assertEqual( set(found['key1']), set(('value1',)) )
+    self.assertEqual( set(found['key2']), set(('value2',)) )
+    self.assertEqual( set(found.keys()), set(('key1','key2')) )
     
   # ----------------------------------------
   def test_depict_paths_rootonly(self):
     searchexpr = '(parameters (show SHOW))'
-    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/SHOW',))
-    self.assertEquals( foundlist, expected )
+      '/tmp/dirbtest1/projects/SHOW',))
+    self.assertEqual( foundlist, expected )
     
   # ----------------------------------------
   def test_depict_paths_collect_exception(self):
     searchexpr = '(parameters (show SHOW) (sequence SEQUENCE) (shot SHOT) (dept DEPT))'
     # this is not a valid path specification, because DEPT is not in the 'department' collection.
-    self.assertRaises( KeyError, self.d.depict_paths, searchexpr, "/tmp/dirbtests/projects")
+    self.assertRaises( KeyError, self.d.depict_paths, searchexpr, "/tmp/dirbtest1/projects")
     
   # ----------------------------------------
   def test_depict_paths_multiparam_multidir(self):
     searchexpr = '(parameters (show SHOW) (sequence SEQUENCE) (shot SHOT) (dept animation))'
     # "open" parameterizations like this will build the entire ancestor hierarchy
-    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT',
-      '/tmp/dirbtests/projects/SHOW/asset',
-      '/tmp/dirbtests/projects/SHOW',
-      '/tmp/dirbtests/projects/SHOW/sequence',
-      '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE',
-      '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/animation'))
-    self.assertEquals( foundlist, expected )   
+      '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT',
+      '/tmp/dirbtest1/projects/SHOW/asset',
+      '/tmp/dirbtest1/projects/SHOW',
+      '/tmp/dirbtest1/projects/SHOW/sequence',
+      '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE',
+      '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT/animation'))
+    self.assertEqual( foundlist, expected )   
     
   # ----------------------------------------
   def test_depict_paths_multiparam_bookmark(self):
     searchexpr = '(and (bookmark workarea) (parameters (show SHOW) (sequence SEQUENCE) (shot SHOT) (dept animation)))'
     # the bookmark forces only workareas, not the entire hierarchy up to the parameterized leaf.
-    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/animation',))
-    self.assertEquals( foundlist, expected )   
+      '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT/animation',))
+    self.assertEqual( foundlist, expected )   
     
   # ----------------------------------------
   def test_depict_paths_andor(self):
@@ -266,110 +268,196 @@ class SimpleLocalClientTest(unittest.TestCase):
         )
       )"""
     # the bookmark forces only workareas, not the entire hierarchy up to the parameterized leaf.
-    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtests/projects")
+    foundlist = self.d.depict_paths( searchexpr, "/tmp/dirbtest1/projects")
     foundlist = set( x.path for x in foundlist )
     expected = set((
-      '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/lighting',
-      '/tmp/dirbtests/projects/SHOW/asset/TYPE/ASSET/lighting'))
-    self.assertEquals( foundlist, expected )
+      '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT/lighting',
+      '/tmp/dirbtest1/projects/SHOW/asset/TYPE/ASSET/lighting'))
+    self.assertEqual( foundlist, expected )
   
   # ----------------------------------------
   def test_get_path_context_realpath( self ):
-    targetpath = '/tmp/dirbtests/projects/show/asset/vehicle/car1/lighting'
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    targetpath = '/tmp/dirbtest1/projects/show/asset/vehicle/car1/lighting'
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
     expected = set( {'dept': 'lighting', 'assettype': 'vehicle', 'asset': 'car1', 'show': 'show'}.items() )
-    self.assertEquals( found.path, targetpath )
-    self.assertEquals( set(found.parameters.items()), expected )
+    self.assertEqual( found.path, targetpath )
+    self.assertEqual( set(found.parameters.items()), expected )
     
   # ----------------------------------------
   def test_get_path_context_realpath2( self ):
-    targetpath = '/tmp/dirbtests/projects/show/sequence/bb'
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    targetpath = '/tmp/dirbtest1/projects/show/sequence/bb'
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
     expected = set( {'sequence': 'bb', 'show': 'show'}.items() )
-    self.assertEquals( found.path, targetpath )
-    self.assertEquals( set(found.parameters.items()), expected )
+    self.assertEqual( found.path, targetpath )
+    self.assertEqual( set(found.parameters.items()), expected )
     
   # ----------------------------------------
   def test_get_path_context_depictedpath( self ):
-    targetpath = '/tmp/dirbtests/projects/newshow/asset/character/bigguy/animation'
+    targetpath = '/tmp/dirbtest1/projects/newshow/asset/character/bigguy/animation'
     # this targetpath does not actually exist on disk, but can still be interrogated
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
     expected = set( {'dept': 'animation', 'assettype': 'character', 'asset': 'bigguy', 'show': 'newshow'}.items() )
-    self.assertEquals( found.path, targetpath )
-    self.assertEquals( set(found.parameters.items()), expected )
+    self.assertEqual( found.path, targetpath )
+    self.assertEqual( set(found.parameters.items()), expected )
 
   # ----------------------------------------
   def test_get_path_context_depictedfilename( self ):
-    targetpath = '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/animation/application/scenes/filename.scene'
+    targetpath = '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT/animation/application/scenes/filename.scene'
     # it is okay to go deeper than the directory structure understands, it will return the deepest context it knows
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
     expected = set( {'dept': 'animation', 'sequence': 'SEQUENCE', 'shot': 'SHOT', 'show': 'SHOW'}.items() )
-    self.assertEquals( found.path, '/tmp/dirbtests/projects/SHOW/sequence/SEQUENCE/SHOT/animation' )
-    self.assertEquals( set(found.parameters.items()), expected )
+    self.assertEqual( found.path, '/tmp/dirbtest1/projects/SHOW/sequence/SEQUENCE/SHOT/animation' )
+    self.assertEqual( set(found.parameters.items()), expected )
 
   # ----------------------------------------
   def test_get_path_context_depictedpath_badcollection( self ):
-    targetpath = '/tmp/dirbtests/projects/falseshow/asset/set/castle/infantry'
+    targetpath = '/tmp/dirbtest1/projects/falseshow/asset/set/castle/infantry'
     # department value in this targetpath is not a member of the department collection
-    self.assertRaises( KeyError, self.d.get_path_context, targetpath, "/tmp/dirbtests/projects" )
+    self.assertRaises( KeyError, self.d.get_path_context, targetpath, "/tmp/dirbtest1/projects" )
   
   # ----------------------------------------
   def test_get_path_context_shallow( self ):
-    targetpath = '/tmp/dirbtests/projects/SHOW/editorial/workarea'
+    targetpath = '/tmp/dirbtest1/projects/SHOW/editorial/workarea'
     # targetpath is not compatible with this directory structure
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
-    self.assertEquals( found.path, '/tmp/dirbtests/projects/SHOW' )
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
+    self.assertEqual( found.path, '/tmp/dirbtest1/projects/SHOW' )
     
   # ----------------------------------------
   def test_get_path_context_notvalidpath( self ):
-    targetpath = '/tmp/dirbtests/thing/SHOW'
+    targetpath = '/tmp/dirbtest1/thing/SHOW'
     # targetpath is not compatible with this directory structure
-    found = self.d.get_path_context( targetpath, "/tmp/dirbtests/projects" )
-    self.assertEquals( found, None )
+    found = self.d.get_path_context( targetpath, "/tmp/dirbtest1/projects" )
+    self.assertEqual( found, None )
   
   # ----------------------------------------
   def test_get_frontier_contexts_root( self ):
-    targetpath = '/tmp/dirbtests/projects'
-    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    targetpath = '/tmp/dirbtest1/projects'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtest1/projects" )
     expected_keys = ["show"]
     expected_parameters = {'show':'show'}
-    self.assertEquals( found.keys(), expected_keys )
-    self.assertEquals( len( found['show'] ), 1 )
-    self.assertEquals( found['show'][0].parameters, expected_parameters )
+    self.assertEqual( set(found.keys()), set(expected_keys) )
+    self.assertEqual( len( found['show'] ), 1 )
+    self.assertEqual( found['show'][0].parameters, expected_parameters )
     
   # ----------------------------------------
   def test_get_frontier_contexts_cluster( self ):
-    targetpath = '/tmp/dirbtests/projects/show/sequence'
-    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    targetpath = '/tmp/dirbtest1/projects/show/sequence'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtest1/projects" )
     expected_keys = ["sequence"]
     expected_parameters = set(['aa','bb','cc'])
-    self.assertEquals( found.keys(), expected_keys )
-    self.assertEquals( len( found['sequence'] ), len(expected_parameters) )
+    self.assertEqual( set(found.keys()), set(expected_keys) )
+    self.assertEqual( len( found['sequence'] ), len(expected_parameters) )
     found_parameters = set( i.parameters['sequence'] for i in found['sequence'] )
-    self.assertEquals( set(found_parameters), expected_parameters )
+    self.assertEqual( set(found_parameters), expected_parameters )
 
   # ----------------------------------------
   def test_get_frontier_contexts_branch( self ):
-    targetpath = '/tmp/dirbtests/projects/show'
-    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtests/projects" )
+    targetpath = '/tmp/dirbtest1/projects/show'
+    found = self.d.get_frontier_contexts( targetpath, "/tmp/dirbtest1/projects" )
     expected_keys = set(["sequence",'assettype'])
     expected_parameters = set(['aa','bb','cc'])
-    self.assertEquals( set(found.keys()), expected_keys )
-    self.assertEquals( len( found['sequence'] ), len(expected_parameters) )
+    self.assertEqual( set(found.keys()), expected_keys )
+    self.assertEqual( len( found['sequence'] ), len(expected_parameters) )
     found_parameters = set( i.parameters['sequence'] for i in found['sequence'] )
-    self.assertEquals( set(found_parameters), expected_parameters )
+    self.assertEqual( set(found_parameters), expected_parameters )
     
     expected_parameters = set(['vehicle'])
-    self.assertEquals( len( found['assettype'] ), len(expected_parameters) )
+    self.assertEqual( len( found['assettype'] ), len(expected_parameters) )
     found_parameters = set( i.parameters['assettype'] for i in found['assettype'] )
-    self.assertEquals( set(found_parameters), expected_parameters )
+    self.assertEqual( set(found_parameters), expected_parameters )
     
   # ----------------------------------------
   def tearDown(self):
     # @@ should we remove the directories we created?
     pass
   
+# ==========================================
 
+class SimplePermissionsTest(unittest.TestCase): 
+
+  def setUp(self):
+
+    self.doc = ds.compile_dir_structure( { 
+      'collections' : {"datatype":["caches","scenes","images"], 'assettype':['character','prop','vehicle','set']},
+      'rules' : {
+          
+        'ROOT' : [
+                ['BranchLevel', {'rules':['assets','shots']}],
+                ],
+        
+        'shots' : [
+                ['ParameterizedLevel', { "key":'datatype', "collection":"datatype", 'user':'root', 'group':'root', 'permissions':'rwxr-xr-x'}],
+                ['ParameterizedLevel', { "key":'show'}],
+                ['ParameterizedLevel', { "key":'sequence'}],
+                ['ParameterizedLevel', { "key":'shot', 'bookmarks':['shotroot']}],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['workarea'], 'user':'(parameter user)', 'group':'shotdept', 'permissions':'rwxr-x---' }]
+                ],                
+          
+          
+        'assets' :[
+                ['FixedLevel', {"name":'assets', 'user':'root', 'group':'root', 'permissions':'rwxr-xr-x'}],
+                ['ParameterizedLevel', { "key":'show', 'group':'assetdept'}],
+                ['ParameterizedLevel', { "key":'assettype', 'collection':'assettype'}],
+                ['ParameterizedLevel', { "key":'assetname', 'bookmarks':['assetroot'] }],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['workarea'], 'user':'(parameter user)', 'permissions':'rwxr-x---' }]
+            ]
+        }
+    } )
+    self.d = localclient.LocalClient( self.doc )
+
+  # ----------------------------------------
+  def test_simple_depict1(self):
+    createexpr = '(and (bookmark workarea) (parameters (show diehard)(assettype vehicle)(assetname gunshipA)(user bwillis)))'
+    foundlist = self.d.depict_paths( createexpr, '/tmp/dirbtest2' )
+    self.assertEqual( 1, len(foundlist) )
+    expected = { 'attributes':{}, 'parameters':{'assetname': 'gunshipA', 'assettype': 'vehicle', 'user': 'bwillis', 'show': 'diehard'}, 'path':'/tmp/dirbtest2/assets/diehard/vehicle/gunshipA/bwillis', 'collections':{'assettype': 'assettype'}, 'user':'bwillis', 'group':'assetdept', 'permissions':488 }
+    found = foundlist[0]
+    self.assertEqual( found.attributes, expected['attributes'] )
+    self.assertEqual( found.parameters, expected['parameters'] )
+    self.assertEqual( found.path, expected['path'] )
+    self.assertEqual( found.collections, expected['collections'] )
+    self.assertEqual( found.user, expected['user'] )
+    self.assertEqual( found.group, expected['group'] )
+    self.assertEqual( found.permissions, expected['permissions'] )
+    
+  # ----------------------------------------
+  def test_simple_depict2(self):
+    createexpr = '(and (bookmark workarea) (parameters (datatype caches)(show diehard)(sequence QQQ)(shot TTT)(user bwillis)))'
+    foundlist = self.d.depict_paths( createexpr, '/tmp/dirbtest2' )
+    self.assertEqual( 1, len(foundlist) )
+    expected = { 'attributes':{}, 'parameters':{'datatype': 'caches', 'sequence': 'QQQ', 'shot': 'TTT', 'user': 'bwillis', 'show': 'diehard'}, 'path':'/tmp/dirbtest2/caches/diehard/QQQ/TTT/bwillis', 'collections':{'datatype': 'datatype'}, 'user':'bwillis', 'group':'shotdept', 'permissions':488 }
+    found = foundlist[0]
+    self.assertEqual( found.attributes, expected['attributes'] )
+    self.assertEqual( found.parameters, expected['parameters'] )
+    self.assertEqual( found.path, expected['path'] )
+    self.assertEqual( found.collections, expected['collections'] )
+    self.assertEqual( found.user, expected['user'] )
+    self.assertEqual( found.group, expected['group'] )
+    self.assertEqual( found.permissions, expected['permissions'] )
+    
+  # ----------------------------------------
+  def test_simple_depict3(self):
+    createexpr = '(and (bookmark shotroot) (parameters (datatype images)(show dh2)(sequence qqq)(shot ttt)(user arickman)))'
+    foundlist = self.d.depict_paths( createexpr, '/tmp/dirbtest2' )
+    self.assertEqual( 1, len(foundlist) )
+    expected = { 'attributes':{}, 'parameters':{'datatype': 'images', 'show': 'dh2', 'shot': 'ttt', 'sequence': 'qqq'}, 'path':'/tmp/dirbtest2/images/dh2/qqq/ttt', 'collections':{'datatype': 'datatype'}, 'user':'root', 'group':'root', 'permissions':493 }
+    found = foundlist[0]
+    self.assertEqual( found.attributes, expected['attributes'] )
+    self.assertEqual( found.parameters, expected['parameters'] )
+    self.assertEqual( found.path, expected['path'] )
+    self.assertEqual( found.collections, expected['collections'] )
+    self.assertEqual( found.user, expected['user'] )
+    self.assertEqual( found.group, expected['group'] )
+    self.assertEqual( found.permissions, expected['permissions'] )
+    
+  # ----------------------------------------
+  def tearDown(self):
+    pass
+  
+
+  
+  
+#####################################################################
 if __name__ == '__main__':
     unittest.main()
 

@@ -21,6 +21,17 @@ try: # version-proof
 except ImportError :
     import xmlrpc.client as xmlrpc_lib
     
+# -------------------------------------------------------------------    
+
+from .. import localclient
+from .. import fs
+
+# -------------------------------------------------------------------    
+
+import stat
+import grp
+import pwd
+import os
 
 # -------------------------------------------------------------------    
 # things that we probably don't want to expose to configuration:
@@ -28,18 +39,22 @@ except ImportError :
 NONCE_EXPIRY = 60 # seconds
 NONCE_CACHE_LIMIT = 4096
 
+DEFAULT_UID = 0
+DEFAULT_GID = 0
+DEFAULT_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+
 # -------------------------------------------------------------------    
 #    
-# Implements a XML-RPC client base class 
+# Implements a XML-RPC client class 
 # with decorators to autopopulate from the
 # definition of the server:
 #
 # Unfortunately, XMLRPC does not support optional arguments, so this complicates
 # our attempts at simplifying the parameters associated with authentication.
 #
-class ClientBase( object ) :
+class RemoteClient( localclient.Client ) :
   
-    def __init__( self, confdict, notifier=None ):
+    def __init__( self, confdict, compileddoc, notifier=None ):
         server_list = [x.strip() for x in confdict['DIRB_SERVERS'].split(',')]
         assert len(server_list) > 0
         self._server_list = server_list
@@ -48,6 +63,7 @@ class ClientBase( object ) :
         self._server_num = random.randint( 0, self._server_bound-1) 
         self._notifier = notifier
         self._conf = confdict
+        super(RemoteClient, self).__init__( compileddoc )
 
     # ===========================================
           
@@ -348,7 +364,7 @@ class ServerApp :
     
             
     @_authorized
-    @ClientBase._rpc_all
+    @RemoteClient._rpc_all
     def shutdown_server(self, user):
         "friendly shutdown of the cluster"
         cred = auth.UserCredentials( *user )
@@ -361,14 +377,28 @@ class ServerApp :
     # ===========================================
 
     @_authorized
-    @ClientBase._rpc_one
-    def create_paths_directories(self, user, doc, createexpr, startingpath ):
-      cl = LocalClient
+    @RemoteClient._rpc_one
+    def create_paths_directories(self, user, compileddoc, createexpr, startingpath ):
+      cl = localclient.LocalClient( compileddoc ) 
+      
+      # get target paths to create
       target_paths = cl.depict_paths( createexpr, startingpath )
-      # sort by path length
+      # sort target paths soas to create shallow directories first
+      target_paths = ( (fs.split_paths(x), x) for x in target_paths )
+      target_paths = [ (len(x[0]), x[1], x[-1]) for x in target_paths ]
+      target_paths = [ x[-1] for x in sorted( target_paths ) ]
+      
       for target in target_paths:
-        # @@ acquire permissions
+        # acquire permissions, uid, gid
+        uid = pwd.getpwnam( target.user ).pw_uid if target.user else DEFAULT_UID
+        gid = grp.getgrnam( target.group ).gr_gid if target.group else DEFAULT_GID
+        permissions = target.permissions if target.permissions else DEFAULT_PERMISSIONS
+        
         # create directory
+        os.mkdir(target.path)
+        
         # set permissions on this directory
-        pass # @@ TODO 
+        os.chown(target.path, uid, gid)
+        os.chmod(target.path, permissions )
+        
       return [ t.path for t in target_paths ]

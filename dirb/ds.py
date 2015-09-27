@@ -17,6 +17,9 @@
 #####################################################################
 
 from . import pathexpr
+from . import attrexpr
+from . import ugoexpr
+
 from . import fs
 
 import copy
@@ -116,7 +119,10 @@ __class__.__base__.__subclasses__() if t.__name__ ==
             'key' : 'department'
             'bookmarks' : ['workarea'],
             'localattributes' : {},
-            'treeattributes' : {},      
+            'treeattributes' : {},
+            'user' : '(parameter user)',
+            'group' : 'vfx',
+            'permissions' : 'rwxr-xr-x' 
          }],
         
         ['directory', {
@@ -144,15 +150,15 @@ a compiled rule has:
 
 Directory level types:
   fixed : one or more fixed names, not parameterized
-     fields : bookmarks, local attrs, tree attrs, name
+     fields : bookmarks, local attrs, tree attrs, name, user, group, permissions
   branch : redirects to one or more other rules, IN ORDER, no special attributes of its own
      fields: rules
   parameterized : any number of parameterized directories, there is one key and potentially many values.
-     fields : bookmarks, local attrs, tree attrs, key, collection,
+     fields : bookmarks, local attrs, tree attrs, key, collection, user group, permissions
      if there is an collection attribute, then the values are restricted.
   regex : can represent zero or more parameters, as defined by the groups in the expression.  Also good when
      there is a prefix or suffix or restrictions on the character set.
-     fields: bookmarks, local attrs, tree attrs, pattern, collections
+     fields: bookmarks, local attrs, tree attrs, pattern, collections, user, group, permissions
      regex is TODO
 """
 
@@ -312,8 +318,8 @@ def get_rule_parameters( levellist, doc ): # used during compile
 
 
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
-PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections") ) # includes attrs and params from current level # @@ should we include bookmarks too?
-LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection" )) # elements of current level only
+PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level # @@ should we include bookmarks too?
+LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection", "user", "group", "permissions" )) # elements of current level only
 
 #
 # @@ ONE LAST TRAVERSAL FEATURE:
@@ -335,7 +341,11 @@ def _traverse( searcher, rule, ctx, client ):
       levellocalattr = levelfields['localattributes'] if 'localattributes' in levelfields else {}
       levelparameter = levelfields['key'] if 'key' in levelfields else None
       levelcollection = levelfields['collection'] if 'collection' in levelfields else None
-      levelctx = LevelTraversalContext( levelbookmarks, leveltreeattr, levellocalattr, levelparameter, levelcollection )
+      leveluser = levelfields['user'] if 'user' in levelfields else None
+      levelgroup = levelfields['group'] if 'group' in levelfields else None
+      levelpermissions = levelfields['permissions'] if 'permissions' in levelfields else None
+      
+      levelctx = LevelTraversalContext( levelbookmarks, leveltreeattr, levellocalattr, levelparameter, levelcollection, leveluser, levelgroup, levelpermissions )
       
       # get directories for this level
       ruletuples = FnLevel[ leveltype ].get_directories( levelctx, levelfields, searcher, pathlist, client )
@@ -362,11 +372,15 @@ def _traverse( searcher, rule, ctx, client ):
           if levelcollection:
             collections[ levelparameter ] = levelcollection
             
-        newctx = PathTraversalContext( localattr, parameters, dirname, collections )
+        user = attrexpr.eval_attribute_expr( leveluser, localattr, parameters ) if leveluser else ictx.user
+        group = attrexpr.eval_attribute_expr( levelgroup, localattr, parameters ) if levelgroup else ictx.group
+        permissions = ugoexpr.eval_ugo_expr( levelpermissions ) if levelpermissions else ictx.permissions
+        
+        newctx = PathTraversalContext( localattr, parameters, dirname, collections, user, group, permissions )
         test = searcher.does_intersect_path( newctx )
         if test:
           searcher.test( newctx, levelctx )
-          newctx = PathTraversalContext( treeattr, parameters, dirname, collections ) # context that the children see & modify
+          newctx = PathTraversalContext( treeattr, parameters, dirname, collections, user, group, permissions ) # context that the children see & modify
           passedlist.append( newctx )
         
       pathlist = passedlist
