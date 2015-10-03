@@ -1,4 +1,8 @@
 # dirb
-dirb is a system for creating, managing and searching complex directory structures
+Dirb is a system for creating, managing and searching complex directory structures
 
-dirb is in a pre-release state.  Please stand by.
+Dirb is in a beta state.  Basic services including directory search and directory creation on the server are supported and unit-tested.
+
+Documentation is a work in progress.
+
+
