@@ -51,11 +51,6 @@ import glob
 #       A bookmark can appear in different places, meaning that it can have multiple parameterizations
 #       a bookmark is not inherited
 #   has attributes, which can either be inherited down or not. (treeattribute, localattribute)
-#       An attribute might reference a parameter or another attribute that is valid in that scope:
-#           attribute['owner'] = '@attribute' or '$parameter' a double $$ passes a $ and a double @@ passes a @.
-#       Value substitution should only be attempted on strings, of course.  Numbers and booleans, etc pass straight through.
-#       This should be left for the user to do, resolving all attributes everywhere can be tricky. (?)
-#       This whole scheme can be implemented by the user, using the get_properties() interface
 #   might be parameterized or not. a parameter is either unrestricted or restricted to a selection from a collection and
 #   has a default owner and permissions.  The owner could be parameterized.
 #
@@ -72,32 +67,6 @@ import glob
 #     "fixed" directories should be listed first, in the reference list.
 #     parameterized directories should be listed last (and ideally, there's only one!)
 #
-
-# Do we need a permissive search as well as a specific search, to allow (for example) sequence areas to be found/built when building a shot area?
-#
-# Should there be a logfile extension to dirb, for dropping logs as operations execute?
-#
-# Should there be a compile stage for directory structure grammars, so that all the analysis (child bookmarks)
-# etc takes place once, rather than on each load of the file?  It's also good for validation.  TODO: compare
-# performance between python serialization, json.
-#
-#
-# safe eval() is needed for search predicate.
-# use 
-# eval(expr_string,{"__builtins__":None}, ctx )
-# 
-# reference: http://lybniz2.sourceforge.net/safeeval.html
-# tested and working in python 2.7.x and 3.4.x
-#
-# counter-argument: 
-"""(t for t in 42 .__class__.__base__.__subclasses__() if t.__name__ ==
-'LibraryLoader').next()((t for t in
-__class__.__base__.__subclasses__() if t.__name__ ==
-'CDLL').next()).msvcrt.system("SOMETHING MALICIOUS")"""
-# apparently works on windows and some *nix
-#
-# exclude expressions that include double-underscore??
-
 
 
 
@@ -177,7 +146,6 @@ class BaseLevel(object):
     pass
   
   def validate( self, levelfields, path_list, client ): # for use during compile (?)
-    ## @@ TBD
     return True
   
   def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):
@@ -318,15 +286,9 @@ def get_rule_parameters( levellist, doc ): # used during compile
 
 
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
-PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level # @@ should we include bookmarks too?
+PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level
 LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection", "user", "group", "permissions" )) # elements of current level only
 
-#
-# @@ ONE LAST TRAVERSAL FEATURE:
-# would be great if the "path" was not a scalar, but rather a list/tuple of paths
-# which were synonyms from the possibility of soft links being used.
-# would be great if a search on a soft-link-resolved path "just worked."
-#
 
 
 def _traverse( searcher, rule, ctx, client ):

@@ -25,6 +25,9 @@ except ImportError :
 
 from .. import localclient
 from .. import fs
+from .. import conf
+from .. import auth
+from .. import ds
 
 # -------------------------------------------------------------------    
 
@@ -32,6 +35,15 @@ import stat
 import grp
 import pwd
 import os
+import logging
+import inspect
+import functools
+import copy
+import threading
+import random
+import socket
+import base64
+import datetime
 
 # -------------------------------------------------------------------    
 # things that we probably don't want to expose to configuration:
@@ -52,7 +64,7 @@ DEFAULT_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP 
 # Unfortunately, XMLRPC does not support optional arguments, so this complicates
 # our attempts at simplifying the parameters associated with authentication.
 #
-class RemoteClient( localclient.Client ) :
+class RemoteClient( localclient.LocalClient ) :
   
     def __init__( self, confdict, compileddoc, notifier=None ):
         server_list = [x.strip() for x in confdict['DIRB_SERVERS'].split(',')]
@@ -95,12 +107,51 @@ class RemoteClient( localclient.Client ) :
         if len( args ) > user_index :
             newargs = list( args )
             newargs[ user_index ] = user
+        elif len( args ) == user_index :
+            newargs = list( args ) + [ user ]
         else:
+            # xmlrpc does not support kwargs, so we cannot use them
             raise TypeError( 'Unable to attach authentication argument' )
         
         return newargs, newkw
 
+    # ===========================================
+    
+    def _set_compileddoc( self, doc_index, doc, args, kwargs ):
+        newargs = args
+        newkw = kwargs
+        if doc_index is not None:
+            if len( args ) > doc_index :
+                newargs = list( args )
+                newargs[ doc_index ] = doc
+            elif len( args ) == doc_index :
+                newargs = list( args ) + [ doc ]
+            else:
+                # xmlrpc does not support kwargs, so we cannot use them
+                raise TypeError( 'Unable to attach compiled schema document' )
+        
+        return newargs, newkw
 
+    # ===========================================
+    
+    def _replace_args( self, server, method, args, kwargs ):
+        "as a convenience, we can automagically fill in some args that the server method requires"
+        argspec = inspect.getargspec(method)
+        user_index = argspec.args.index( 'user' ) - 1 
+        doc_index = argspec.args.index( 'compileddoc' ) - 1 if 'compileddoc' in argspec.args else None
+        
+        # security protocol replaces username with a full user-credential object:
+        servernonce = server.get_nonce()
+        username = self._get_user( user_index, args, kwargs )
+        user = tuple( auth.get_user_credentials( username, self._conf, servernonce ))
+        newargs, newkw = self._set_user( user_index, user, args, kwargs )
+        
+        # attach the compile document to the call, when appropriate:
+        if doc_index is not None:
+            newargs, newkw = self._set_compileddoc( doc_index, self._doc, newargs, newkw )
+            
+        return newargs, newkw
+    
     # ===========================================
     
     # if a server fails, then send email and remove it from the list!
@@ -111,14 +162,8 @@ class RemoteClient( localclient.Client ) :
             p = xmlrpc_lib.ServerProxy(server, allow_none=True )
             name = method.__name__
             
-            argspec = inspect.getargspec(method)
-            user_index = argspec.args.index( 'user' ) - 1 
-            
-            # security protocol replaces username with a full user-credential object:
-            servernonce = p.get_nonce()
-            username = self._get_user( user_index, args, kwargs )
-            user = tuple( auth.get_user_credentials( username, self._conf, servernonce ))
-            newargs, newkw = self._set_user( user_index, user, args, kwargs )
+            # replace any arguments that we should:
+            newargs, newkw = self._replace_args( p, method, args, kwargs )
             
             # Be careful here, if you mess this call up, you'll be calling the
             # local definition of the server method, not the method on the remote server!
@@ -146,14 +191,8 @@ class RemoteClient( localclient.Client ) :
                 p = xmlrpc_lib.ServerProxy(server, allow_none=True )
                 name = method.__name__
                 
-                argspec = inspect.getargspec(method)
-                user_index = argspec.args.index( 'user' ) - 1
-                
-                # security protocol replaces username with a full user-credential object:
-                servernonce = p.get_nonce()
-                username = self._get_user( user_index, args, kwargs )
-                user = tuple( auth.get_user_credentials( username, self._conf, servernonce ))
-                newargs, newkw = self._set_user( user_index, user, args, kwargs )
+                # replace any arguments that we should:
+                newargs, newkw = self._replace_args( p, method, args, kwargs )
                 
                 # Be careful here, if you mess this call up, you'll be calling the
                 # local definition of the server method, not the method on the remote server!
@@ -202,13 +241,10 @@ class RemoteClient( localclient.Client ) :
             server = args[server_index]
 
             p = xmlrpc_lib.ServerProxy(server, allow_none=True )
-            method = p.__getattr__(fn.__name__)                
-                
-            # security protocol replaces username with a full user-credential object:
-            username = client._get_user( user_index, args, kwargs )
-            servernonce = p.get_nonce()
-            user = tuple( auth.get_user_credentials( username, client._conf, servernonce ))
-            newargs, newkw = client._set_user( user_index, user, args, kwargs )
+            method = p.__getattr__(fn.__name__)
+            
+            # replace any arguments that we should:
+            newargs, newkw = client._replace_args( p, method, args, kwargs )
 
             # Be careful here, if you mess this call up, you'll be calling the
             # local definition of the server method, not the method on the remote server!    
@@ -278,7 +314,7 @@ class ServerApp :
             
         # ---------------------------------------
         
-        self._mutex =  threading.Lock() # @@ multilock???????
+        self._mutex =  threading.Lock() # TODO: should this be a multi-lock?
 
         # ---------------------------------------
         
@@ -307,9 +343,9 @@ class ServerApp :
         nonce = base64.b64encode(auth.get_nonce()).encode( "utf-8" )
         now = datetime.datetime.now()
         
-        self._noncelock.acquire( True )
+        self._lock()
         self._noncecache[ nonce ] = now
-        self._noncelock.release()
+        self._unlock()
         
         return nonce
       
@@ -318,23 +354,25 @@ class ServerApp :
     def _auth_user( self, cred ):
         # prune if past a limit:
         if len( self._noncecache ) > NONCE_CACHE_LIMIT :
-            self._noncelock.acquire( True )
-            keys = self._noncecache.keys() 
-            for k in keys:
-                if now - self._noncecache[k] > datetime.timedelta( seconds=NONCE_EXPIRY ) :
-                    del self._noncecache[k]
-            self._noncelock.release()
+            try:
+                self._lock()
+                keys = self._noncecache.keys() 
+                for k in keys:
+                    if now - self._noncecache[k] > datetime.timedelta( seconds=NONCE_EXPIRY ) :
+                      del self._noncecache[k]
+            finally:
+                self._unlock()
         
         # need to verify the server nonce before we call auth module to verify the credentials:
         ret = False
         try:
-            self._noncelock.acquire( True )
+            self._lock()
             timestamp = self._noncecache[ cred.servernonce ]
             if datetime.datetime.now() - timestamp < datetime.timedelta( seconds=NONCE_EXPIRY ):
                 del self._noncecache[ cred.servernonce ]
                 ret = auth.verify_user_credentials( cred, self._config )
         finally:
-            self._noncelock.release()
+            self._unlock()
         if not ret:
             raise SystemError( "Permission Denied" )
         return ret
@@ -378,27 +416,33 @@ class ServerApp :
 
     @_authorized
     @RemoteClient._rpc_one
-    def create_paths_directories(self, user, compileddoc, createexpr, startingpath ):
-      cl = localclient.LocalClient( compileddoc ) 
-      
-      # get target paths to create
-      target_paths = cl.depict_paths( createexpr, startingpath )
-      # sort target paths soas to create shallow directories first
-      target_paths = ( (fs.split_paths(x), x) for x in target_paths )
-      target_paths = [ (len(x[0]), x[1], x[-1]) for x in target_paths ]
-      target_paths = [ x[-1] for x in sorted( target_paths ) ]
-      
-      for target in target_paths:
-        # acquire permissions, uid, gid
-        uid = pwd.getpwnam( target.user ).pw_uid if target.user else DEFAULT_UID
-        gid = grp.getgrnam( target.group ).gr_gid if target.group else DEFAULT_GID
-        permissions = target.permissions if target.permissions else DEFAULT_PERMISSIONS
+    def create_paths_directories(self, createexpr, startingpath, user, compileddoc ):
+        cl = localclient.LocalClient( compileddoc ) 
+        cred = auth.UserCredentials( *user )
         
-        # create directory
-        os.mkdir(target.path)
+        # get target paths to create
+        target_paths = cl.depict_paths( createexpr, startingpath )
         
-        # set permissions on this directory
-        os.chown(target.path, uid, gid)
-        os.chmod(target.path, permissions )
+        # sort target paths soas to create shallow directories first
+        target_paths = ( (fs.split_path(x.path), x) for x in target_paths )
+        target_paths = [ (len(x[0]), len(x[0]), x[-1].path, x[-1]) for x in target_paths ]
+        target_paths = [ x[-1] for x in sorted( target_paths ) ]
         
-      return [ t.path for t in target_paths ]
+        for target in target_paths:
+            # acquire permissions, uid, gid
+            uid = pwd.getpwnam( target.user ).pw_uid if target.user else DEFAULT_UID
+            gid = grp.getgrnam( target.group ).gr_gid if target.group else DEFAULT_GID
+            permissions = target.permissions if target.permissions else DEFAULT_PERMISSIONS
+            
+            # create directory
+            if not os.path.isdir( target.path ) :
+                os.mkdir(target.path)
+            
+                # set permissions on this directory 
+                # will not overwrite existing permissions on existing dirs!
+                os.chown(target.path, uid, gid)
+                os.chmod(target.path, permissions )
+                
+                self._logger.debug( "%s created %s" % (cred.username, target.path))
+        
+        return [ t.path for t in target_paths ]

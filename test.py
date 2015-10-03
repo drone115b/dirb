@@ -368,7 +368,7 @@ class SimpleLocalClientTest(unittest.TestCase):
     
   # ----------------------------------------
   def tearDown(self):
-    # @@ should we remove the directories we created?
+    # TODO should we remove the directories we created?
     pass
   
 # ==========================================

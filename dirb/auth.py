@@ -50,7 +50,7 @@ except:
 # (1) user 'password' files, which are named <username>.bin and contain random bytes
 #     and whose permissions only allow reading by root or the user, not by anyone else.
 #     The contents of the file constitute a shared SECRET with the server running as root.
-# (2) a file called _methods.json (Method permissions file) which contains a nested dictionary:
+# (2) a file called _dirb_methods.json (Method permissions file) which contains a nested dictionary:
 #    the first key is the name of a server method
 #       the value for the method key is a dictionary with keys "groups" or "users"
 #       (both keys optional)
@@ -68,10 +68,10 @@ def _make_userpass_filename ( username, confdict ):
     return os.path.join( confdict['DIRB_AUTHPATH' ], "%s.bin" % username )
 
 def _make_method_permission_filename( confdict ):
-    return os.path.join( confdict['DIRB_AUTHPATH' ], '_methods.json' )
+    return os.path.join( confdict['DIRB_AUTHPATH' ], '_dirb_methods.json' )
 
 def read_method_permissions( confdict ):
-    # @@ would be nice if permissions on the filename were proven to be restricted
+    # TODO would be nice if permissions on the filename were proven to be restricted
     filename = _make_method_permission_filename( confdict )
     return json.loads( open( filename, 'rt' ).read() )
 

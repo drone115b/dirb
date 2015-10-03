@@ -267,41 +267,6 @@ def _create_pcollector_bookmark( slist ):
   return None
 
 # -------------------------------------
-"""
-
-@@
-SEARCH RULE:
-
-RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
-PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections") ) # includes attrs and params from current level
-LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameters", "collection" )) # elements of current level only
-
-implemented:
-
-      ["parameters", {'show':'exp1','shot':thing,'department':thing}]
-      ["attributes", {'smell':'stinky'}]   # ATTRIBUTES PREDICATES ONLY WORK IF THE ATTRIBUTE IS A STRICT KEY-VALUE PAIR!
-      ["bookmarks", ["shot"]]
-      ["and", [subpredicate, subpredicate]]
-      ["or", [subpredicate, subpredicate]]
-      ['not', subpredicate]
-      ['pass' ] # return true for everything!
-      
-not implemented:
-      ["parameters-match", {'show':'dom*'}] # use fnmatch?
-      ['bookmarks-above', [value,value]]
-      ['bookmarks-below', [value,value]]
-      ["attributes-match", {'show':'dom*'}] # a has-attributes operations may be ['attributes-match', {'key':'*'} ]  # ATTRIBUTES PREDICATES ONLY WORK IF THE ATTRIBUTE IS A STRICT KEY-VALUE PAIR!
-      ['attributes-below', ['key','key']]
-      
-      
-@@ CREATION RULE    
-implemented:
-      ["parameters", {'show':'exp1','shot':thing,'department':thing}]
-      ["bookmarks", ["shot"]]
-      ["and", [subpredicate, subpredicate]]
-      ["or", [subpredicate, subpredicate]]
-      
-"""
 
 
 class SearcherExists( object ):

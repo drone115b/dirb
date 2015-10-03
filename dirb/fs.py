@@ -41,7 +41,7 @@ def split_path(path):
   return [drive] + _split( drivelesspath )
 
 
-def join_path( drive, *pathparts ): # @@ needs verification
+def join_path( drive, *pathparts ):
   "concatentates a drive spec and a list of path parts into a complete path"
   return os.path.join( drive, *pathparts )
 
