@@ -44,6 +44,7 @@ import random
 import socket
 import base64
 import datetime
+import codecs
 
 # -------------------------------------------------------------------    
 # things that we probably don't want to expose to configuration:
@@ -159,7 +160,11 @@ class RemoteClient( localclient.LocalClient ) :
         server = self._pick_one()
         ret = None
         try:
-            p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+            try: 
+                p = xmlrpc_lib.ServerProxy(server, allow_none=True, use_builtin_types=True )
+            except TypeError :
+                p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+
             name = method.__name__
             
             # replace any arguments that we should:
@@ -188,7 +193,10 @@ class RemoteClient( localclient.LocalClient ) :
         # would be lovely to execute in parallel:
         for server in self._server_list :
             try:
-                p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+                try: 
+                    p = xmlrpc_lib.ServerProxy(server, allow_none=True, use_builtin_types=True )
+                except TypeError :
+                    p = xmlrpc_lib.ServerProxy(server, allow_none=True )
                 name = method.__name__
                 
                 # replace any arguments that we should:
@@ -240,7 +248,11 @@ class RemoteClient( localclient.LocalClient ) :
         def api( client, *args, **kwargs ):
             server = args[server_index]
 
-            p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+            try: 
+                p = xmlrpc_lib.ServerProxy(server, allow_none=True, use_builtin_types=True )
+            except TypeError :
+                p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+
             method = p.__getattr__(fn.__name__)
             
             # replace any arguments that we should:
@@ -340,13 +352,12 @@ class ServerApp :
     # ===========================================
         
     def get_nonce( self ):
-        nonce = base64.b64encode(auth.get_nonce()).encode( "utf-8" )
+        nonce = codecs.decode( base64.b64encode(auth.get_nonce()), "utf-8" )
         now = datetime.datetime.now()
         
         self._lock()
         self._noncecache[ nonce ] = now
         self._unlock()
-        
         return nonce
       
     # -------------------------------------------
@@ -375,6 +386,7 @@ class ServerApp :
             self._unlock()
         if not ret:
             raise SystemError( "Permission Denied" )
+
         return ret
 
     # -------------------------------------------
@@ -425,11 +437,12 @@ class ServerApp :
         
         # sort target paths soas to create shallow directories first
         target_paths = ( (fs.split_path(x.path), x) for x in target_paths )
-        target_paths = [ (len(x[0]), len(x[0]), x[-1].path, x[-1]) for x in target_paths ]
+        target_paths = [ (len(x[0]), x[-1].path, x[-1]) for x in target_paths ]
         target_paths = [ x[-1] for x in sorted( target_paths ) ]
         
         for target in target_paths:
             # acquire permissions, uid, gid
+            # TODO: would be nice to cache these credentials to reduce overhead:
             uid = pwd.getpwnam( target.user ).pw_uid if target.user else DEFAULT_UID
             gid = grp.getgrnam( target.group ).gr_gid if target.group else DEFAULT_GID
             permissions = target.permissions if target.permissions else DEFAULT_PERMISSIONS

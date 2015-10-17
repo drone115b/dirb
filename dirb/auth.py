@@ -24,6 +24,7 @@ import datetime
 import stat
 import base64
 import json
+import codecs
 
 try:
     # Assume Linux, OSX:
@@ -69,6 +70,9 @@ def _make_userpass_filename ( username, confdict ):
 
 def _make_method_permission_filename( confdict ):
     return os.path.join( confdict['DIRB_AUTHPATH' ], '_dirb_methods.json' )
+  
+def _make_hash( noncehex, clientnonce, filename ) :
+   return hashlib.sha256( base64.b64decode(noncehex) + clientnonce + open(filename,'rb').read() ).hexdigest()
 
 def read_method_permissions( confdict ):
     # TODO would be nice if permissions on the filename were proven to be restricted
@@ -110,14 +114,14 @@ def get_user_credentials( username, confdict, noncehex ):
             make_user_credentials( username, confdict )
 
     clientnonce = get_nonce()
-    dochash = hashlib.sha256( base64.b64decode(noncehex) + clientnonce + open(filename,'rb').read() ).hexdigest()
-    return UserCredentials( username, noncehex, base64.b64encode(clientnonce), dochash )
+    dochash = _make_hash( noncehex, clientnonce, filename )
+    return UserCredentials( username, noncehex, base64.b64encode(clientnonce).decode('utf-8'), dochash )
 
 
 def verify_user_credentials( cred, confdict ):
     "This does NOT include the check to verify that the server nonce is valid"
     filename = _make_userpass_filename( cred.username, confdict )
-    dochash = hashlib.sha256( base64.b64decode(cred.servernonce) + base64.b64decode(cred.clientnonce) + open(filename,'rb').read() ).hexdigest()
+    dochash = _make_hash( cred.servernonce, base64.b64decode(cred.clientnonce), filename)
     return dochash == cred.pwhash
 
 

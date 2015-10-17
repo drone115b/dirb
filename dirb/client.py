@@ -16,7 +16,7 @@
 # 
 #####################################################################
 
-import localclient
+from . import localclient
 from . import server
 
 LocalClient = localclient.LocalClient
