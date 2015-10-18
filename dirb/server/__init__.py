@@ -67,7 +67,7 @@ DEFAULT_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP 
 #
 class RemoteClient( localclient.LocalClient ) :
   
-    def __init__( self, confdict, compileddoc, notifier=None ):
+    def __init__( self, confdict, compileddoc, startingpath, notifier=None ):
         server_list = [x.strip() for x in confdict['DIRB_SERVERS'].split(',')]
         assert len(server_list) > 0
         self._server_list = server_list
@@ -76,7 +76,7 @@ class RemoteClient( localclient.LocalClient ) :
         self._server_num = random.randint( 0, self._server_bound-1) 
         self._notifier = notifier
         self._conf = confdict
-        super(RemoteClient, self).__init__( compileddoc )
+        super(RemoteClient, self).__init__( compileddoc, startingpath )
 
     # ===========================================
           
@@ -127,12 +127,35 @@ class RemoteClient( localclient.LocalClient ) :
                 newargs[ doc_index ] = doc
             elif len( args ) == doc_index :
                 newargs = list( args ) + [ doc ]
+            elif len( args) < doc_index :
+                delta = doc_index - len( args )
+                newargs = list( args ) + [ None ] * delta + [ doc ]
             else:
                 # xmlrpc does not support kwargs, so we cannot use them
                 raise TypeError( 'Unable to attach compiled schema document' )
         
         return newargs, newkw
-
+      
+    # ===========================================
+    
+    def _set_startingpath( self, path_index, path, args, kwargs ):
+        newargs = args
+        newkw = kwargs
+        if path_index is not None:
+            if len( args ) > path_index :
+                newargs = list( args )
+                newargs[ path_index ] = path
+            elif len( args ) == path_index :
+                newargs = list( args ) + [ path ]
+            elif len( args) < path_index :
+                delta = path_index - len( args )
+                newargs = list( args ) + [ None ] * delta + [ path ]
+            else:
+                # xmlrpc does not support kwargs, so we cannot use them
+                raise TypeError( 'Unable to attach starting path' )
+        
+        return newargs, newkw
+      
     # ===========================================
     
     def _replace_args( self, server, method, args, kwargs ):
@@ -140,6 +163,7 @@ class RemoteClient( localclient.LocalClient ) :
         argspec = inspect.getargspec(method)
         user_index = argspec.args.index( 'user' ) - 1 
         doc_index = argspec.args.index( 'compileddoc' ) - 1 if 'compileddoc' in argspec.args else None
+        path_index = argspec.args.index( 'startingpath' ) - 1 if 'startingpath' in argspec.args else None
         
         # security protocol replaces username with a full user-credential object:
         servernonce = server.get_nonce()
@@ -148,8 +172,11 @@ class RemoteClient( localclient.LocalClient ) :
         newargs, newkw = self._set_user( user_index, user, args, kwargs )
         
         # attach the compile document to the call, when appropriate:
+        # attach the starting path to the call, will very frequently pair with the compiled document
         if doc_index is not None:
             newargs, newkw = self._set_compileddoc( doc_index, self._doc, newargs, newkw )
+        if path_index is not None:
+            newargs, newkw = self._set_startingpath( path_index, self._root, newargs, newkw )
             
         return newargs, newkw
     
@@ -428,12 +455,12 @@ class ServerApp :
 
     @_authorized
     @RemoteClient._rpc_one
-    def create_paths_directories(self, createexpr, startingpath, user, compileddoc ):
-        cl = localclient.LocalClient( compileddoc ) 
+    def create_paths_directories(self, createexpr, user, compileddoc, startingpath ):
+        cl = localclient.LocalClient( compileddoc, startingpath ) 
         cred = auth.UserCredentials( *user )
         
         # get target paths to create
-        target_paths = cl.depict_paths( createexpr, startingpath )
+        target_paths = cl.depict_paths( createexpr )
         
         # sort target paths soas to create shallow directories first
         target_paths = ( (fs.split_path(x.path), x) for x in target_paths )

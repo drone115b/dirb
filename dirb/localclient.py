@@ -40,8 +40,9 @@ from . import fs
   
 
 class LocalClient( object ) :
-  def __init__(self, compileddoc ):
+  def __init__(self, compileddoc, startingpath ):
     self._doc = compileddoc
+    self._root = startingpath
 
   def get_rule_names( self ):
     return self._doc['rules'].keys()
@@ -61,8 +62,8 @@ class LocalClient( object ) :
   def get_global( self, attrname ):
     return self._doc['globals'][attrname] if attrname in self._doc['globals'] else None
 
-  def traverse( self, searcher, startingpath ): # advanced API, not necessarily public
-    ctx = ds.PathTraversalContext( {}, {}, startingpath, {}, None, None, None )
+  def traverse( self, searcher ): # advanced API, not necessarily public
+    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     client = self
     return ds._traverse( searcher, rule, ctx, client )
@@ -98,23 +99,23 @@ class LocalClient( object ) :
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
   
-  def search_paths( self, searchexpr, startingpath ):
+  def search_paths( self, searchexpr ):
     """implies a query, with a specific predicate or filter to narrow the search, returns only paths that exist"""
     searcher = pathexpr.SearcherExists( self, searchexpr )
-    ctx = ds.PathTraversalContext( {}, {}, startingpath, {}, None, None, None )
+    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
   
-  def depict_paths( self, createexpr, startingpath ):
+  def depict_paths( self, createexpr ):
     "this returns a not-exists path, but does not make a directory on disk"
     searcher = pathexpr.SearcherNotExists( self, createexpr )
-    ctx = ds.PathTraversalContext( {}, {}, startingpath, {}, None, None, None )
+    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
   
-  def get_path_context( self, targetpath, startingpath ):
+  def get_path_context( self, targetpath ):
     "returns the path traversal context for the given path, works for real paths or depicted paths, will reject invalid paths, will accept paths deeper than what the structure knows about giving the deepest context it can"
     class SearcherPath( object ):
       def __init__( self, targetpath, client ) :
@@ -152,10 +153,10 @@ class LocalClient( object ) :
         return ret
       
     searcher = SearcherPath( targetpath, self )
-    ctx = ds.PathTraversalContext( {}, {}, startingpath, {}, None, None, None )
+    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )
-    ret = ctx if targetpath == startingpath else None
+    ret = ctx if targetpath == self._root else None
     if searcher._store :
       # all depths in the traversal needed to have a match, otherwise the path was not valid for the directory structure:
       if all( searcher._store[i] for i in searcher._store ):
@@ -165,7 +166,7 @@ class LocalClient( object ) :
         ret = searcher._store[key][0]
     return ret
 
-  def get_frontier_contexts( self, targetpath, startingpath ):
+  def get_frontier_contexts( self, targetpath ):
     """given an existing path, returns the 'next' parameter to be defined, as well as the paths to which that parameter leads.
     necessary for UI development.
     returns a dictionary where the key is the parameter name, and the value is the list of directories associated with that parameter
@@ -215,9 +216,9 @@ class LocalClient( object ) :
       def get_parameters( self, key, levelctx, pathctxlist ):
         return None
 
-    targetctx = self.get_path_context( targetpath, startingpath )
+    targetctx = self.get_path_context( targetpath )
     searcher = SearcherPath( targetctx, self )
-    ctx = ds.PathTraversalContext( {}, {}, startingpath, {}, None, None, None )
+    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
