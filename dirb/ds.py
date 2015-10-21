@@ -286,7 +286,7 @@ def get_rule_parameters( levellist, doc ): # used during compile
 
 
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
-PathTraversalContext = collections.namedtuple( "PathTraversalContext", ("attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level
+PathTraversalContext = collections.namedtuple( "PathTraversalContext", ( "bookmarks", "attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level
 LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection", "user", "group", "permissions" )) # elements of current level only
 
 
@@ -338,11 +338,11 @@ def _traverse( searcher, rule, ctx, client ):
         group = attrexpr.eval_attribute_expr( levelgroup, localattr, parameters ) if levelgroup else ictx.group
         permissions = ugoexpr.eval_ugo_expr( levelpermissions ) if levelpermissions else ictx.permissions
         
-        newctx = PathTraversalContext( localattr, parameters, dirname, collections, user, group, permissions )
+        newctx = PathTraversalContext( levelbookmarks, localattr, parameters, dirname, collections, user, group, permissions )
         test = searcher.does_intersect_path( newctx )
         if test:
           searcher.test( newctx, levelctx )
-          newctx = PathTraversalContext( treeattr, parameters, dirname, collections, user, group, permissions ) # context that the children see & modify
+          newctx = PathTraversalContext( levelbookmarks, treeattr, parameters, dirname, collections, user, group, permissions ) # context that the children see & modify
           passedlist.append( newctx )
         
       pathlist = passedlist

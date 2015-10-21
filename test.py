@@ -159,6 +159,7 @@ class SimpleLocalClientTest(unittest.TestCase):
     pathctx = foundlist[0]
     self.assertEqual( pathctx.path, '/tmp/dirbtest1/projects/show/sequence/bb/xx' )
     self.assertEqual( pathctx.parameters, {'show': 'show', 'shot': 'xx', 'sequence': 'bb'} )
+    self.assertEqual( pathctx.bookmarks, ['shotroot'] )
     
   # ----------------------------------------
   def test_search_paths_multifinder_parameters(self):

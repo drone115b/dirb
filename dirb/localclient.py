@@ -63,7 +63,7 @@ class LocalClient( object ) :
     return self._doc['globals'][attrname] if attrname in self._doc['globals'] else None
 
   def traverse( self, searcher ): # advanced API, not necessarily public
-    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     client = self
     return ds._traverse( searcher, rule, ctx, client )
@@ -94,7 +94,7 @@ class LocalClient( object ) :
         else:
           return ('X',)
     searcher = SearcherBookmarks( self )
-    ctx = ds.PathTraversalContext( {}, {}, '', {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, '', {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
@@ -102,7 +102,7 @@ class LocalClient( object ) :
   def search_paths( self, searchexpr ):
     """implies a query, with a specific predicate or filter to narrow the search, returns only paths that exist"""
     searcher = pathexpr.SearcherExists( self, searchexpr )
-    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
@@ -110,7 +110,7 @@ class LocalClient( object ) :
   def depict_paths( self, createexpr ):
     "this returns a not-exists path, but does not make a directory on disk"
     searcher = pathexpr.SearcherNotExists( self, createexpr )
-    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
@@ -153,7 +153,7 @@ class LocalClient( object ) :
         return ret
       
     searcher = SearcherPath( targetpath, self )
-    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )
     ret = ctx if targetpath == self._root else None
@@ -218,7 +218,7 @@ class LocalClient( object ) :
 
     targetctx = self.get_path_context( targetpath )
     searcher = SearcherPath( targetctx, self )
-    ctx = ds.PathTraversalContext( {}, {}, self._root, {}, None, None, None )
+    ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
     ds._traverse( searcher, rule, ctx, self )  
     return searcher._store
