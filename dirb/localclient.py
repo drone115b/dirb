@@ -45,21 +45,26 @@ class LocalClient( object ) :
     self._root = startingpath
 
   def get_rule_names( self ):
+    "Returns all the names of rules in the schema document"
     return self._doc['rules'].keys()
   
   def get_rule( self, rulename ): # advanced API, not necessarily public; returns compiled rule
     return self._doc['rules'][rulename] if rulename in self._doc['rules'] else None
   
   def get_collection_names( self ):
+    "Returns all the names of collections in the schema document"
     return self._doc['collections'].keys()
   
   def get_collection( self, collectionname ) : 
+    "Given a collection name, returns the set of possible values"
     return self._doc['collections'][collectionname] if collectionname in self._doc['collections'] else None
   
   def get_global_names( self ):
+    "Returns the globals dictionary"
     return self._doc['globals'].keys()
   
   def get_global( self, attrname ):
+    "Returns a value from the globals dictionary, given a key"
     return self._doc['globals'][attrname] if attrname in self._doc['globals'] else None
 
   def traverse( self, searcher ): # advanced API, not necessarily public
@@ -69,10 +74,13 @@ class LocalClient( object ) :
     return ds._traverse( searcher, rule, ctx, client )
   
   def get_bookmark_names( self ) :
+    "Returns all the names of bookmarks in the schema document"
     return self._doc['rules']['ROOT']['bookmarks']
   
   def get_bookmark_parameters( self, bookmark ):
-    """returns the parameters required to find the bookmark.  A list of dictionaries.  Each dictionary is a set of parameters required to find the bookmark.  The key is the parameter name and the value determines which, if any, collection the parameter is associated with."""
+    """Returns the parameters required to find the bookmark, a list of dictionaries.  
+    Each dictionary is an alternative set of parameters required to find the bookmark.
+    The key is the parameter name and the value determines which, if any, collection the parameter is associated with."""
     class SearcherBookmarks( object ):
       def __init__( self, dirstructure ) :
         self._store = []
@@ -100,7 +108,11 @@ class LocalClient( object ) :
     return searcher._store
   
   def search_paths( self, searchexpr ):
-    """implies a query, with a specific predicate or filter to narrow the search, returns only paths that exist"""
+    """Primary interface for searching directory structures.
+    Returns one or more PathTraveralContext objects that match
+    the given search expression.
+    Returns only paths that exist on the file system.
+    See also depict_paths()"""
     searcher = pathexpr.SearcherExists( self, searchexpr )
     ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
@@ -108,7 +120,11 @@ class LocalClient( object ) :
     return searcher._store
   
   def depict_paths( self, createexpr ):
-    "this returns a not-exists path, but does not make a directory on disk"
+    """Returns one or more PathTraveralContext objects that match
+    the given creation expression.
+    Paths don't necessarily exist on the file system, the file system is not referenced.
+    This is useful in simulating creation operations.
+    See also search_paths()"""
     searcher = pathexpr.SearcherNotExists( self, createexpr )
     ctx = ds.PathTraversalContext( [], {}, {}, self._root, {}, None, None, None )
     rule = self._doc[ 'rules' ][ 'ROOT' ]
@@ -116,7 +132,10 @@ class LocalClient( object ) :
     return searcher._store
   
   def get_path_context( self, targetpath ):
-    "returns the path traversal context for the given path, works for real paths or depicted paths, will reject invalid paths, will accept paths deeper than what the structure knows about giving the deepest context it can"
+    """Returns the path traversal context for the given path. 
+    Path may be real or depicted.  Will reject invalid paths. 
+    Will accept paths deeper than what the structure knows about,
+    giving the deepest context it can."""
     class SearcherPath( object ):
       def __init__( self, targetpath, client ) :
         self._splitpath = fs.split_path( targetpath )
@@ -167,10 +186,13 @@ class LocalClient( object ) :
     return ret
 
   def get_frontier_contexts( self, targetpath ):
-    """given an existing path, returns the 'next' parameter to be defined, as well as the paths to which that parameter leads.
-    necessary for UI development.
-    returns a dictionary where the key is the parameter name, and the value is the list of directories associated with that parameter
-    
+    """Given an existing path, returns the 'next' parameter to be defined, 
+    as well as the paths to which that parameter leads.
+    This method is most useful for for UI development, where you 
+    might depict the directory structure as a tree and only expose
+    the next level in the tree as the user unfolds it in a widget.
+    Returns a dictionary where the key is the parameter name, 
+    and the value is the list of directories associated with that parameter.
     """
     """
     
