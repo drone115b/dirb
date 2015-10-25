@@ -109,7 +109,7 @@ class LocalClient( object ) :
   
   def search_paths( self, searchexpr ):
     """Primary interface for searching directory structures.
-    Returns one or more PathTraveralContext objects that match
+    Returns a list of PathTraveralContext objects that match
     the given search expression.
     Returns only paths that exist on the file system.
     See also depict_paths()"""
@@ -120,7 +120,7 @@ class LocalClient( object ) :
     return searcher._store
   
   def depict_paths( self, createexpr ):
-    """Returns one or more PathTraveralContext objects that match
+    """Returns a list of PathTraveralContext objects that match
     the given creation expression.
     Paths don't necessarily exist on the file system, the file system is not referenced.
     This is useful in simulating creation operations.
