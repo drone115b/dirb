@@ -456,9 +456,10 @@ class ServerApp :
     @_authorized
     @RemoteClient._rpc_one
     def create_paths(self, createexpr, user, compileddoc, startingpath ):
-        "Returns a list of PathTraveralContexts, one for each path that was created from the given creation expression."
+        "Returns a list of paths that were created from the given creation expression."
         cl = localclient.LocalClient( compileddoc, startingpath ) 
         cred = auth.UserCredentials( *user )
+        created = []
         
         # get target paths to create
         target_paths = cl.depict_paths( createexpr )
@@ -485,5 +486,6 @@ class ServerApp :
                 os.chmod(target.path, permissions )
                 
                 self._logger.debug( "%s created %s" % (cred.username, target.path))
+                created.append( target.path )
         
-        return target_paths
+        return created
