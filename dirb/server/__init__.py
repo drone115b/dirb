@@ -455,7 +455,8 @@ class ServerApp :
 
     @_authorized
     @RemoteClient._rpc_one
-    def create_paths_directories(self, createexpr, user, compileddoc, startingpath ):
+    def create_paths(self, createexpr, user, compileddoc, startingpath ):
+        "Returns a list of paths that were created from the given creation expression."
         cl = localclient.LocalClient( compileddoc, startingpath ) 
         cred = auth.UserCredentials( *user )
         
