@@ -56,6 +56,12 @@ DEFAULT_UID = 0
 DEFAULT_GID = 0
 DEFAULT_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
 
+# -------------------------------------------------------------------
+
+def tuples_to_ptclist( tlist ):
+    "transcoder to receive list of tuples and convert them to list of PathTraversalContexts"
+    return [ ds.PathTraversalContext( *l ) for l in tlist ]
+
 # -------------------------------------------------------------------    
 #    
 # Implements a XML-RPC client class 
@@ -246,52 +252,61 @@ class RemoteClient( localclient.LocalClient ) :
     # ===========================================
       
     @classmethod
-    def _rpc_one( cls, fn ):
-        def api( client, *args, **kwargs ):
-            return client._call_one( fn, *args, **kwargs )
-        
-        api.__doc__ = fn.__doc__
-        setattr( cls, fn.__name__, api )  
-        return fn
+    def _rpc_one( cls, transcoder=None ):
+        def fn_d ( fn ):
+            def api( client, *args, **kwargs ):
+                ret = client._call_one( fn, *args, **kwargs )
+                return transcoder( ret ) if transcoder else ret
+            
+            api.__doc__ = fn.__doc__
+            setattr( cls, fn.__name__, api )  
+            return fn
+        return fn_d
 
     # ===========================================
       
     @classmethod
-    def _rpc_all( cls, fn ):
-        def api( client, *args, **kwargs ):
-            return client._call_all( fn, *args, **kwargs )
-            
-        api.__doc__ = fn.__doc__
-        setattr( cls, fn.__name__, api )  
-        return fn
+    def _rpc_all( cls, transcoder=None ):
+        def fn_d( fn ):
+            def api( client, *args, **kwargs ):
+                ret = client._call_all( fn, *args, **kwargs )
+                return transcoder( ret ) if transcoder else ret
+                
+            api.__doc__ = fn.__doc__
+            setattr( cls, fn.__name__, api )  
+            return fn
+        return fn_d
 
     # ===========================================
     
     @classmethod
-    def _rpc_specific( cls, fn ):
-        argspec = inspect.getargspec(fn)
-        server_index = argspec.args.index( 'server' ) - 1
-        
-        def api( client, *args, **kwargs ):
-            server = args[server_index]
-
-            try: 
-                p = xmlrpc_lib.ServerProxy(server, allow_none=True, use_builtin_types=True )
-            except TypeError :
-                p = xmlrpc_lib.ServerProxy(server, allow_none=True )
-
-            method = p.__getattr__(fn.__name__)
+    def _rpc_specific( cls, transcoder=None ):
+        def fn_d( fn ):
+            argspec = inspect.getargspec(fn)
+            server_index = argspec.args.index( 'server' ) - 1
             
-            # replace any arguments that we should:
-            newargs, newkw = client._replace_args( p, method, args, kwargs )
+            def api( client, *args, **kwargs ):
+                server = args[server_index]
 
-            # Be careful here, if you mess this call up, you'll be calling the
-            # local definition of the server method, not the method on the remote server!    
-            return method(*newargs, **newkw) # do the function call
-          
-        api.__doc__ = fn.__doc__
-        setattr( cls, fn.__name__, api )
-        return fn
+                try: 
+                    p = xmlrpc_lib.ServerProxy(server, allow_none=True, use_builtin_types=True )
+                except TypeError :
+                    p = xmlrpc_lib.ServerProxy(server, allow_none=True )
+
+                method = p.__getattr__(fn.__name__)
+                
+                # replace any arguments that we should:
+                newargs, newkw = client._replace_args( p, method, args, kwargs )
+
+                # Be careful here, if you mess this call up, you'll be calling the
+                # local definition of the server method, not the method on the remote server!
+                ret = method(*newargs, **newkw) # do the function call
+                return transcoder( ret ) if transcoder else ret
+              
+            api.__doc__ = fn.__doc__
+            setattr( cls, fn.__name__, api )
+            return fn
+        return fn_d 
       
 
 # -------------------------------------------------------------------
@@ -441,7 +456,7 @@ class ServerApp :
     
             
     @_authorized
-    @RemoteClient._rpc_all
+    @RemoteClient._rpc_all()
     def shutdown_server(self, user):
         "friendly shutdown of the cluster"
         cred = auth.UserCredentials( *user )
@@ -454,9 +469,9 @@ class ServerApp :
     # ===========================================
 
     @_authorized
-    @RemoteClient._rpc_one
+    @RemoteClient._rpc_one( transcoder=tuples_to_ptclist )
     def create_paths(self, createexpr, user, compileddoc, startingpath ):
-        "Returns a list of paths that were created from the given creation expression."
+        "Returns a list of PathTraversalContexts that were created from the given creation expression."
         cl = localclient.LocalClient( compileddoc, startingpath ) 
         cred = auth.UserCredentials( *user )
         created = []
@@ -486,6 +501,6 @@ class ServerApp :
                 os.chmod(target.path, permissions )
                 
                 self._logger.debug( "%s created %s" % (cred.username, target.path))
-                created.append( target.path )
+                created.append( tuple(target) ) # use transcoder on client side to get back namedtuple objects.
         
         return created
