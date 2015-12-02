@@ -1,5 +1,6 @@
 dirb Copyright 2015 by Mayur Patel
 
+
 wsgi_xmlrpc module originally authored by 
     mikeal.rogers@gmail.com
     https://code.google.com/p/wsgi-xmlrpc/
@@ -8,3 +9,7 @@ wsgi_xmlrpc module originally authored by
     This project has been forked for cog to advance python 3.x support.
     (Original author has not responded to a request to merge back
     changes for >3 years so we assume he's abandoned it.)
+
+    
+parse module copyright 2012-2013 Richard Jones <richard@python.org>
+    (version 1.6.6  https://pypi.python.org/pypi/parse)

@@ -59,6 +59,7 @@ class SimpleLocalClientTest(unittest.TestCase):
       '/tmp/dirbtest1/projects/show/asset/vehicle',
       '/tmp/dirbtest1/projects/show/asset/vehicle/car1',
       '/tmp/dirbtest1/projects/show/asset/vehicle/car1/lighting',
+      '/tmp/dirbtest1/projects/show/asset/vehicle/car1/dontfind',
       '/tmp/dirbtest1/projects/show/sequence',
       '/tmp/dirbtest1/projects/show/sequence/aa',
       '/tmp/dirbtest1/projects/show/sequence/aa/xx',
@@ -66,6 +67,7 @@ class SimpleLocalClientTest(unittest.TestCase):
       '/tmp/dirbtest1/projects/show/sequence/bb/xx',
       '/tmp/dirbtest1/projects/show/sequence/bb/xx/animation',
       '/tmp/dirbtest1/projects/show/sequence/bb/xx/lighting',
+      '/tmp/dirbtest1/projects/show/sequence/bb/xx/dontfind',
       '/tmp/dirbtest1/projects/show/sequence/bb/yy',
       '/tmp/dirbtest1/projects/show/sequence/bb/zz',
       '/tmp/dirbtest1/projects/show/sequence/cc'
@@ -259,15 +261,7 @@ class SimpleLocalClientTest(unittest.TestCase):
     
   # ----------------------------------------
   def test_depict_paths_andor(self):
-    searchexpr = """
-      (and 
-        (bookmark workarea) 
-        (or 
-          (parameters (sequence SEQUENCE) (shot SHOT))
-          (parameters (assettype TYPE) (asset ASSET))
-          (parameters (show SHOW) (dept lighting))
-        )
-      )"""
+    searchexpr = "(and (bookmark workarea) (or (parameters (sequence SEQUENCE) (shot SHOT))(parameters (assettype TYPE) (asset ASSET))(parameters (show SHOW) (dept lighting))))"
     # the bookmark forces only workareas, not the entire hierarchy up to the parameterized leaf.
     foundlist = self.d.depict_paths( searchexpr )
     foundlist = set( x.path for x in foundlist )
@@ -456,7 +450,73 @@ class SimplePermissionsTest(unittest.TestCase):
     pass
   
 
-  
+# ==========================================
+class SimpleFormattedLevelTest(unittest.TestCase):
+
+  def setUp(self):
+
+    self.doc = ds.compile_dir_structure( { 
+      'collections' : {"datatype":["caches","scenes","images"], 'assettype':['chr','prp','veh','set']},
+      'rules' : {
+          
+        'ROOT' : [
+                ['ParameterizedLevel', { "key":'show'}],
+                ['BranchLevel', {'rules':['assets','shots']}],
+                ],
+        
+        'shots' : [
+                ['ParameterizedLevel', { "key":'datatype', "collection":"datatype"}],
+                ['FormattedLevel', { 'format': "seq_{}", "keys":['sequence'], 'bookmarks':['sequenceroot']}],
+                ['FormattedLevel', { 'format': "shot_{}", "keys":['shot'] , 'bookmarks':['shotroot']}],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['shotarea'] }]
+                ],
+          
+          
+        'assets' :[
+                ['FixedLevel', {"name":'assets'}],
+                ['FormattedLevel', { 'format':'{}_{}', 'keys':['assettype','assetname'], 'bookmarks':['assetroot'], 'collections':{ 'assettype':'assettype'} } ],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['assetarea'], }]
+            ]
+        }
+    } )
+    self.rootdir = "/tmp/dirbtest2/projects"
+    self.d = localclient.LocalClient( self.doc, self.rootdir )
+    
+    self.dirlist = (
+      "diehard/caches/seq_0001/shot_0003/johnm/",
+      "diehard/caches/seq_0001/shot_0007/johnm/",
+      "diehard/scenes/seq_0001/shot_0003/johnm/",
+      "diehard/scenes/seq_0002/shot_0012/hansg/",
+      "diehard/images/seq_0001/shot_0003/johnm/",
+      "diehard/dontfind/seq_0001/shot_0003/johnm/",
+      "diehard/assets/chr_partypal/johnm/",
+      "diehard/assets/chr_eurotrash/hansg/",
+      "diehard/assets/prp_ducttape/johnm",
+      "diehard/assets/veh_gunship/johnson",
+      "diehard/assets/dont_find/johnm"
+    )
+    
+    for d in self.dirlist:
+      if not os.path.isdir( os.path.join( self.rootdir, d) ):
+        os.makedirs( os.path.join( self.rootdir, d) )
+
+  # ----------------------------------------
+  def test_simple_search1(self):
+    searchexpr = '(and (bookmark shotarea) (parameters (show diehard)(datatype caches)(sequence 0001)(shot 0007)(user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = ( '/tmp/dirbtest2/projects/diehard/caches/seq_0001/shot_0007/johnm',)
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  def test_simple_search2(self):
+    searchexpr = '(and (bookmark assetarea) (parameters (user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = ( '/tmp/dirbtest2/projects/diehard/assets/chr_partypal/johnm','/tmp/dirbtest2/projects/diehard/assets/prp_ducttape/johnm')
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  def tearDown(self):
+    pass
   
 #####################################################################
 if __name__ == '__main__':

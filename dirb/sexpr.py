@@ -7,7 +7,6 @@ term_regex = re.compile( r'''(?mx)
     \s*(?:
         (?P<brackl>\()|
         (?P<brackr>\))|
-        (?P<num>[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?)|
         (?P<quo>"(?:[^\\]|(?:\\.))*")|
         (?P<s>[^(^)\s]+)
        )''')
@@ -26,11 +25,6 @@ def loads(sexp):
               raise SyntaxError( "Bad nesting in s-expression: %s" % sexp )
             tmpout, out = out, stack.pop(-1)
             out.append(tmpout)
-        elif term == 'num':
-            v = float(value)
-            if v.is_integer(): 
-              v = int(v)
-            out.append(v)
         elif term == 'quo':
             out.append(value[1:-1])
         elif term == 's':

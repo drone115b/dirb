@@ -96,8 +96,8 @@ class LocalClient( object ) :
       def do_existing_paths( self ) :
         return False
       def get_parameters( self, key, levelctx, pathctxlist ):
-        if levelctx.collection:
-          coll = self._ds.get_collection( levelctx.collection )
+        if levelctx.collections and key in levelctx.collections:
+          coll = self._ds.get_collection( levelctx.collections[key] )
           return (coll[0],)
         else:
           return ('X',)
@@ -228,7 +228,7 @@ class LocalClient( object ) :
         missing_count = len( self._targetparam - path_set )
         testpath = fs.split_path( pathctx.path )
         lenpath = min( self._lensplitpath, len(testpath))
-        if extra_count == 1 and ( not missing_count ) and levelctx.parameter:
+        if extra_count == 1 and ( not missing_count ) and levelctx.parameters:
           key = extra_param.pop()
           if not key in self._store:
             self._store[key] = []

@@ -21,6 +21,7 @@ from . import attrexpr
 from . import ugoexpr
 
 from . import fs
+from . import parse # reverse of string.format()
 
 import copy
 import collections
@@ -125,10 +126,9 @@ Directory level types:
   parameterized : any number of parameterized directories, there is one key and potentially many values.
      fields : bookmarks, local attrs, tree attrs, key, collection, user group, permissions
      if there is an collection attribute, then the values are restricted.
-  regex : can represent zero or more parameters, as defined by the groups in the expression.  Also good when
+  formatted : can represent zero or more parameters, as defined by the groups in the expression.  Also good when
      there is a prefix or suffix or restrictions on the character set.
-     fields: bookmarks, local attrs, tree attrs, pattern, collections, user, group, permissions
-     regex is TODO
+     fields: bookmarks, local attrs, tree attrs, format, keys, collections, user, group, permissions
 """
 
 FnLevel = {} # use of a singleton impairs ability to run multi-threaded, locks should be placed inside the level methods that need them.
@@ -158,10 +158,13 @@ class BaseLevel(object):
     keys = levelfields['localattributes'].keys() if 'localattributes' in levelfields else []
     keys.extend( levelfields['treeattributes'].keys() if 'treeattributes' in levelfields else [] )
     return set( keys )
-    
-  def get_parameters( self, levelfields, doc ): # used during compile
-    return set([levelfields['key']] if 'key' in levelfields else [])
 
+  def get_parameters( self, levelfields, doc ): # used during compile
+    return []
+  
+  def parse_level( self, levelfields, basename, client ) : # used during traversal
+    "returns a dictionary of key,values for the parameters, and a dictionary giving the parameter-collection relations"
+    return {}, {}
 
 
 @register_level
@@ -177,7 +180,8 @@ class FixedLevel(BaseLevel) :
     
   def get_parameters( self, levelfields, doc ): # used during compile
     return set()
-  
+
+
 @register_level
 class BranchLevel(BaseLevel) :
   def __init__(self):
@@ -256,6 +260,121 @@ class ParameterizedLevel(BaseLevel) :
           
     return dirlist 
   
+  def get_parameters( self, levelfields, doc ): # used during compile
+    ret = []
+    if 'key' in levelfields:
+      ret = set([levelfields['key']])
+    return ret
+  
+  def parse_level( self, levelfields, basename, client ) : # used during traversal
+    params = {}
+    coll = {}
+    if 'key' in levelfields:
+      params = { levelfields['key'] : basename }
+      if 'collection' in levelfields:
+        coll[ levelfields['key'] ]  = levelfields['collection']
+    return params, coll
+
+
+@register_level
+class FormattedLevel(BaseLevel) :
+  def __init__(self):
+    BaseLevel.__init__(self) # can't use super() because we instance the class before definition is complete!
+
+  def _parse_parameters( self, fixedargs, namedargs, keys, collections, client, do_error=False ):
+    # get fixed matches:
+    ret = dict( zip( keys, fixedargs ) )
+    # get any named matches:
+    for arg in namedargs :
+      if arg in keys:
+        ret[arg] = namedargs[arg]
+    # make sure that collection membership is accounted for:
+    filtered = dict( ret.items() )
+    for k in ret:
+      if k in collections:
+        collname = k
+        coll = client.get_collection( collections[k] )
+        if not ret[k] in coll:
+          if do_error :
+            raise KeyError( "Collection '%s' does not contain %s in formatted level" % (collname, ret[k]))
+          del filtered[k]
+          
+    # now determine whether or not we have a valid match:
+    if not all( k in filtered for k in keys ):
+      return None
+    else:
+      return filtered
+
+
+  def _does_match( self, pathpart, formatstr, levelfields, client ): # @@ verified
+    ret = parse.parse( formatstr, pathpart )
+    if ret is not None:
+      ret = self._parse_parameters( ret.fixed, ret.named, levelfields.get('keys',[]), levelfields.get('collections',{}), client, False )
+    if ret is not None:
+      return True
+    else:
+      return False
+  
+  
+  def get_directories( self, levelctx, levelfields, searcher, ctxlist, client ):
+    doexisting = searcher.do_existing_paths()
+    dirlist = []
+    
+    if doexisting :
+      
+      for ictx in ctxlist:
+        ctxdirs = glob.glob( os.path.join( ictx.path, '*' ))
+        ctxdirs = ( x for x in ctxdirs if os.path.isdir( x )) # directories only, not files    
+        if 'format' in levelfields :
+          ctxdirs = [ x for x in ctxdirs if self._does_match( os.path.split(x)[-1], levelfields['format'], levelfields, client ) ]
+          dirlist.extend( (ictx, x) for x in ctxdirs )
+      
+    else:
+      
+      formatstr = levelfields.get( 'format', '{}')
+      
+      values = {}
+      if 'keys' in levelfields:
+        for k in levelfields['keys']:
+          search_param = searcher.get_parameters( k, levelctx, ctxlist )
+          if search_param:
+            values[k] = [x for x in search_param if x] # eliminate None values
+          
+      if 'collections' in levelfields:
+        for k in values :
+          collname = levelfields['collections'][k]
+          coll = client.get_collection( collname )
+          bad_values = [x for x in values[k] if x not in coll]
+          if bad_values:
+            raise KeyError( "Collection '%s' does not contain %s in formatted level" % (collname, ','.join("'%s'" % x for x in bad_values)))
+          
+      # convert from dictionary back to strings:
+      values = [values[x] for x in levelfields.get('keys',[])]
+      values = [ formatstr.format( x ) for x in itertools.product( values ) ]
+      
+      for ctx, value in itertools.product( ctxlist, values ):
+        dirlist.append((ctx, os.path.join( ctx.path, value )))
+          
+    return dirlist 
+  
+  def get_parameters( self, levelfields, doc ): # used during compile
+    ret = []
+    if 'keys' in levelfields:
+      ret = set(levelfields['keys'])
+    return ret
+  
+  def parse_level( self, levelfields, basename, client ) : # used during traversal
+    params = {}
+    coll = {}
+    if 'keys' in levelfields and 'format' in levelfields:
+      match = parse.parse( levelfields['format'], basename )
+      params = self._parse_parameters( match.fixed, match.named, levelfields.get('keys',[]), levelfields.get('collections',{}), client, False )
+      if 'collections' in levelfields:
+        for key in params:
+          if key in levelfields['collections'] :
+            coll[ key ] = levelfields['collections'][key]
+    return params, coll    
+  
 # -----------
 
 def get_rule_bookmarks( levellist, doc ) : # used during compile
@@ -287,7 +406,7 @@ def get_rule_parameters( levellist, doc ): # used during compile
 
 RuleTraversalContext = collections.namedtuple( "RuleTraversalContext", ("bookmarks", "attributes", "parameters")) # elements of levels contained
 PathTraversalContext = collections.namedtuple( "PathTraversalContext", ( "bookmarks", "attributes", "parameters", "path", "collections", "user", "group", "permissions") ) # includes attrs and params from current level
-LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameter", "collection", "user", "group", "permissions" )) # elements of current level only
+LevelTraversalContext = collections.namedtuple( "LevelTraversalContext", ( "bookmarks", "treeattributes", "localattributes", "parameters", "collections", "user", "group", "permissions" )) # elements of current level only
 
 
 
@@ -301,16 +420,19 @@ def _traverse( searcher, rule, ctx, client ):
       levelbookmarks = levelfields['bookmarks'] if 'bookmarks' in levelfields else []
       leveltreeattr = levelfields['treeattributes'] if 'treeattributes' in levelfields else {}
       levellocalattr = levelfields['localattributes'] if 'localattributes' in levelfields else {}
-      levelparameter = levelfields['key'] if 'key' in levelfields else None
-      levelcollection = levelfields['collection'] if 'collection' in levelfields else None
+      levelparameters = (levelfields['key'],) if 'key' in levelfields else None
+      levelparameters = levelfields['keys'] if 'keys' in levelfields else levelparameters
+      levelcollections = {levelfields.get('key', '' ) : levelfields['collection']} if 'collection' in levelfields else None
+      levelcollections = levelfields['collections'] if 'collections' in levelfields else levelcollections
       leveluser = levelfields['user'] if 'user' in levelfields else None
       levelgroup = levelfields['group'] if 'group' in levelfields else None
       levelpermissions = levelfields['permissions'] if 'permissions' in levelfields else None
       
-      levelctx = LevelTraversalContext( levelbookmarks, leveltreeattr, levellocalattr, levelparameter, levelcollection, leveluser, levelgroup, levelpermissions )
+      levelctx = LevelTraversalContext( levelbookmarks, leveltreeattr, levellocalattr, levelparameters, levelcollections, leveluser, levelgroup, levelpermissions )
       
       # get directories for this level
-      ruletuples = FnLevel[ leveltype ].get_directories( levelctx, levelfields, searcher, pathlist, client )
+      fn = FnLevel[ leveltype ]
+      ruletuples = fn.get_directories( levelctx, levelfields, searcher, pathlist, client )
       
       if not ruletuples:
         break # end for
@@ -328,12 +450,13 @@ def _traverse( searcher, rule, ctx, client ):
           
         parameters = ictx.parameters.copy() # shallow
         collections = ictx.collections.copy() # shallow
-        if levelparameter :
+        if levelparameters :
           basename = os.path.basename( dirname )
-          parameters[ levelparameter ] = basename
-          if levelcollection:
-            collections[ levelparameter ] = levelcollection
-            
+          
+          newparams, newcollections = fn.parse_level( levelfields, basename, client )
+          parameters.update( newparams )
+          collections.update( newcollections )
+          
         user = attrexpr.eval_attribute_expr( leveluser, localattr, parameters ) if leveluser else ictx.user
         group = attrexpr.eval_attribute_expr( levelgroup, localattr, parameters ) if levelgroup else ictx.group
         permissions = ugoexpr.eval_ugo_expr( levelpermissions ) if levelpermissions else ictx.permissions
@@ -344,7 +467,7 @@ def _traverse( searcher, rule, ctx, client ):
           searcher.test( newctx, levelctx )
           newctx = PathTraversalContext( levelbookmarks, treeattr, parameters, dirname, collections, user, group, permissions ) # context that the children see & modify
           passedlist.append( newctx )
-        
+          
       pathlist = passedlist
 
   return
