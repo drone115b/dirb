@@ -517,7 +517,142 @@ class SimpleFormattedLevelTest(unittest.TestCase):
   # ----------------------------------------
   def tearDown(self):
     pass
+
+
+# ==========================================
+class SimpleNegativeOpsTest(unittest.TestCase):
+
+  def setUp(self):
+
+    self.doc = ds.compile_dir_structure( { 
+      'collections' : {"datatype":["caches","scenes","images"], 'assettype':['chr','prp','veh','set']},
+      'rules' : {
+          
+        'ROOT' : [
+                ['ParameterizedLevel', { "key":'show'}],
+                ['BranchLevel', {'rules':['assets','shots']}],
+                ],
+        
+        'shots' : [
+                ['ParameterizedLevel', { "key":'datatype', "collection":"datatype", "treeattributes":{'subtree':'shots'}}],
+                ['FormattedLevel', { 'format': "seq_{}", "keys":['sequence'], 'bookmarks':['sequenceroot']}],
+                ['FormattedLevel', { 'format': "shot_{}", "keys":['shot'] , 'bookmarks':['shotroot']}],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['workarea'] }]
+                ],
+          
+          
+        'assets' :[
+                ['FixedLevel', {"name":'assets', 'treeattributes':{'subtree':'assets'}}],
+                ['FormattedLevel', { 'format':'{}_{}', 'keys':['assettype','assetname'], 'bookmarks':['assetroot'], 'collections':{ 'assettype':'assettype'} } ],
+                ['ParameterizedLevel', { "key":'user', 'bookmarks':['workarea'], }]
+            ]
+        }
+    } )
+    self.rootdir = "/tmp/dirbtest3/projects"
+    self.d = localclient.LocalClient( self.doc, self.rootdir )
+    
+    self.dirlist = (
+      "diehard/caches/seq_0001/shot_0003/johnm/",
+      "diehard/caches/seq_0001/shot_0007/johnm/",
+      "diehard/scenes/seq_0001/shot_0003/johnm/",
+      "diehard/scenes/seq_0002/shot_0012/hansg/",
+      "diehard/images/seq_0001/shot_0003/johnm/",
+      "diehard/dontfind/seq_0001/shot_0003/johnm/",
+      "diehard/assets/chr_partypal/johnm/",
+      "diehard/assets/chr_eurotrash/hansg/",
+      "diehard/assets/prp_ducttape/johnm",
+      "diehard/assets/veh_gunship/johnson",
+      "diehard/assets/dont_find/johnm"
+    )
+    
+    for d in self.dirlist:
+      if not os.path.isdir( os.path.join( self.rootdir, d) ):
+        os.makedirs( os.path.join( self.rootdir, d) )
+
+  # ----------------------------------------
+  def test_simple_search1(self):
+    searchexpr = '(and (bookmark workarea)(parameters (user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest3/projects/diehard/assets/chr_partypal/johnm',
+      '/tmp/dirbtest3/projects/diehard/assets/prp_ducttape/johnm',
+      '/tmp/dirbtest3/projects/diehard/caches/seq_0001/shot_0007/johnm',
+      '/tmp/dirbtest3/projects/diehard/caches/seq_0001/shot_0003/johnm',
+      '/tmp/dirbtest3/projects/diehard/scenes/seq_0001/shot_0003/johnm',
+      '/tmp/dirbtest3/projects/diehard/images/seq_0001/shot_0003/johnm'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  def test_simple_notparameter1(self):
+    searchexpr = '(and (bookmark workarea)(-parameters (user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      "/tmp/dirbtest3/projects/diehard/scenes/seq_0002/shot_0012/hansg",
+      "/tmp/dirbtest3/projects/diehard/assets/chr_eurotrash/hansg",
+      "/tmp/dirbtest3/projects/diehard/assets/veh_gunship/johnson"
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  def test_simple_notparameter2(self):
+    searchexpr = '(and (bookmark workarea) (-parameters (sequence 0001)) (parameters (user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest3/projects/diehard/assets/chr_partypal/johnm',
+      '/tmp/dirbtest3/projects/diehard/assets/prp_ducttape/johnm'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  def test_simple_notattribute1(self):
+    searchexpr = '(and (bookmark workarea)(-attributes (subtree shots)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      "/tmp/dirbtest3/projects/diehard/assets/chr_eurotrash/hansg",
+      "/tmp/dirbtest3/projects/diehard/assets/chr_partypal/johnm",
+      "/tmp/dirbtest3/projects/diehard/assets/prp_ducttape/johnm",
+      "/tmp/dirbtest3/projects/diehard/assets/veh_gunship/johnson"
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  def test_simple_notattribute2(self):
+    searchexpr = '(and (bookmark workarea)(-parameters (user johnm))(-attributes (subtree assets)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      "/tmp/dirbtest3/projects/diehard/scenes/seq_0002/shot_0012/hansg",
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  def test_simple_notattribute3(self):
+    searchexpr = '(and (bookmark workarea)(-parameters (assettype chr)(user johnm))(-attributes (subtree shots)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      "/tmp/dirbtest3/projects/diehard/assets/veh_gunship/johnson",
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  def test_simple_notbookmark1(self):
+    searchexpr = '(and (-bookmark workarea)(attributes (subtree shots))(parameters (datatype caches)(user johnm)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest3/projects/diehard/caches',
+      '/tmp/dirbtest3/projects/diehard/caches/seq_0001/shot_0007',
+      '/tmp/dirbtest3/projects/diehard',
+      '/tmp/dirbtest3/projects/diehard/caches/seq_0001/shot_0003',
+      '/tmp/dirbtest3/projects/diehard/caches/seq_0001'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
   
+  # ----------------------------------------
+  def tearDown(self):
+    pass
+
+
+
 #####################################################################
 if __name__ == '__main__':
     unittest.main()

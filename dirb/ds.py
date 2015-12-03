@@ -306,7 +306,7 @@ class FormattedLevel(BaseLevel) :
       return filtered
 
 
-  def _does_match( self, pathpart, formatstr, levelfields, client ): # @@ verified
+  def _does_match( self, pathpart, formatstr, levelfields, client ):
     ret = parse.parse( formatstr, pathpart )
     if ret is not None:
       ret = self._parse_parameters( ret.fixed, ret.named, levelfields.get('keys',[]), levelfields.get('collections',{}), client, False )

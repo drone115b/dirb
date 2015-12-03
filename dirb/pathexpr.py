@@ -175,34 +175,6 @@ def _create_pcollector_and( slist ):
 
 # -------------------------------------
 
-@_expose_search_level_op( "not" )
-def _search_lvl_not( slist, pathctx, levelctx ):
-  return not search_level_predicate( slist[1:], pathctx, levelctx )
-  
-@_expose_search_path_op( "not" )
-def _search_path_not( slist, pathctx ):
-  return not search_path_predicate( slist[1:], pathctx )
-  
-@_expose_search_rule_op( "not" )
-def _search_rule_not( slist, rulectx ):
-  return not search_rule_predicate( slist[1:], rulectx )
-  
-# -------------------------------------
-
-@_expose_search_level_op("pass")
-def _search_lvl_pass( slist, pathctx, levelctx ):
-  return True
-
-@_expose_search_path_op("pass")
-def _search_path_pass( slist, pathctx ):
-  return True
-  
-@_expose_search_rule_op("pass")
-def _search_rule_pass( slist, rulectx ):
-  return True
-
-# -------------------------------------
-
 @_expose_search_path_op("parameters")  
 @_expose_create_path_op("parameters")  
 def _search_path_parameters( slist, pathctx ):
@@ -229,21 +201,60 @@ def _create_pcollector_parameters( slist ):
 
 # -------------------------------------
 
+@_expose_search_path_op("-parameters")   
+def _search_path_notparameters( slist, pathctx ):
+  valuedict = dict(slist[1:])
+  for key in valuedict:
+     if key in pathctx.parameters:
+       if valuedict[key] == pathctx.parameters[key] :
+         return False
+  return True
+
+@_expose_search_level_op("-parameters")  
+def _search_lvl_notparameters( slist, pathctx, levelctx ):
+  return _search_path_notparameters( slist, pathctx )
+  
+@_expose_search_rule_op("-parameters")
+def _search_rule_notparameters( slist, rulectx ):
+  return True
+
+# -------------------------------------
+
 @_expose_search_path_op("attributes")  
 def _search_path_attributes( slist, pathctx ):
-  for key, value in slist[1]:
+  valuedict = dict(slist[1:])
+  for key in valuedict:
      if key in pathctx.attributes:
-       if value != pathctx.attributes[key] :
+       if valuedict[key] != pathctx.attributes[key] :
          return False
   return True
 
 @_expose_search_level_op("attributes")  
 def _search_lvl_attributes( slist, pathctx, levelctx ):
-  return _path_attributes( slist, pathctx )
+  return _search_path_attributes( slist, pathctx )
   
 @_expose_search_rule_op("attributes")
 def _search_rule_attributes( slist, rulectx ):
   return any( x in rulectx.attributes for x in slist[1] )
+
+# -------------------------------------
+
+@_expose_search_path_op("-attributes")  
+def _search_path_notattributes( slist, pathctx ):
+  valuedict = dict(slist[1:])
+  for key in valuedict:
+     if key in pathctx.attributes:
+       if valuedict[key] == pathctx.attributes[key] :
+         return False
+  return True
+
+@_expose_search_level_op("-attributes")  
+def _search_lvl_notattributes( slist, pathctx, levelctx ):
+  return _search_path_notattributes( slist, pathctx )
+  
+@_expose_search_rule_op("-attributes")
+def _search_rule_notattributes( slist, rulectx ):
+  return True
 
 # -------------------------------------
 
@@ -265,6 +276,20 @@ def _search_rule_bookmark( slist, rulectx ):
 @_expose_create_pcollector_op( "bookmark" )  
 def _create_pcollector_bookmark( slist ):
   return None
+
+# -------------------------------------
+
+@_expose_search_path_op("-bookmark")
+def _search_path_notbookmark( slist, pathctx ):
+  return True
+
+@_expose_search_level_op("-bookmark")
+def _search_lvl_notbookmark( slist, pathctx, levelctx ):
+  return slist[1] not in levelctx.bookmarks
+
+@_expose_search_rule_op("-bookmark")
+def _search_rule_notbookmark( slist, rulectx ):
+  return True
 
 # -------------------------------------
 
