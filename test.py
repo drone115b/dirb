@@ -652,7 +652,7 @@ class SimpleNegativeOpsTest(unittest.TestCase):
     pass
 
 
-
+# ==========================================
 class SimpleGlobTest1(unittest.TestCase):
 
   def setUp(self):
@@ -742,7 +742,53 @@ class SimpleGlobTest1(unittest.TestCase):
     )
     self.assertEqual( set(expected), set( x.path for x in foundlist ) )
     
+  # ----------------------------------------
   
+  def test_simple_depict1(self):
+    createexpr = '(parameters (show diehard)(sequence 999)(shot 888)(dept lighting))'
+    foundlist = self.d.depict_paths( createexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/diehard',
+      '/tmp/dirbtest4/projects/diehard/999x888',
+      '/tmp/dirbtest4/projects/diehard/999x888/lighting'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+    
+  # ----------------------------------------
+  
+  def test_simple_depict2(self):
+    createexpr = '(parameters (show diehard)(sequence 777)(dept lighting))'
+    foundlist = self.d.depict_paths( createexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/diehard',
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  
+  def test_simple_depict3(self):
+    createexpr = '(and (attributes (areatype shots))(parameters (show diehard)(sequence 666)(shot 010)(dept lighting)))'
+    foundlist = self.d.depict_paths( createexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/diehard',
+      '/tmp/dirbtest4/projects/diehard/666x010',
+      '/tmp/dirbtest4/projects/diehard/666x010/lighting'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+      
+  # ----------------------------------------
+  
+  def test_simple_depict4(self):
+    createexpr = '(and (attributes (areatype assets))(parameters (show diehard)(sequence 666)(shot 010)(dept lighting)))'
+    foundlist = self.d.depict_paths( createexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/diehard',
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+      
   def tearDown(self):
     pass
 

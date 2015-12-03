@@ -255,6 +255,10 @@ def _create_lvl_attributes( slist, pathctx, levelctx ):
 def _search_rule_attributes( slist, rulectx ):
   return any( x in rulectx.attributes for x in (y[0] for y in slist[1:]) )
 
+@_expose_create_pcollector_op( "attributes" )  
+def _create_pcollector_attributes( slist ):
+  return None
+
 # -------------------------------------
 
 @_expose_search_path_op("-attributes")  

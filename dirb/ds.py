@@ -348,12 +348,15 @@ class FormattedLevel(BaseLevel) :
           if bad_values:
             raise KeyError( "Collection '%s' does not contain %s in formatted level" % (collname, ','.join("'%s'" % x for x in bad_values)))
           
-      # convert from dictionary back to strings:
-      values = [values[x] for x in levelfields.get('keys',[])]
-      values = [ formatstr.format( x ) for x in itertools.product( values ) ]
+      # determine whether the given parameters match the keys for this level    
+      levelkeys = levelfields.get('keys',[])
+      if set(values.keys()) == set(levelkeys) :
+        # convert from dictionary back to strings:
+        values = [values[x] for x in levelkeys]
+        values = [ formatstr.format( *x ) for x in itertools.product( *values ) ]
       
-      for ctx, value in itertools.product( ctxlist, values ):
-        dirlist.append((ctx, os.path.join( ctx.path, value )))
+        for ctx, value in itertools.product( ctxlist, values ):
+          dirlist.append((ctx, os.path.join( ctx.path, value )))
           
     return dirlist 
   
