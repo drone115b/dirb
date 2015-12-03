@@ -335,6 +335,7 @@ class SearcherNotExists( object ):
     self._ds = ds
     self._expr = sexpr.loads( expr )
     self._parameters = create_parameter_collect( self._expr )
+    self._parameters = self._parameters if self._parameters else {}
   def does_intersect_rule( self, rulectx ):
     return create_rule_predicate( self._expr, rulectx )
   def does_intersect_path( self, pathctx ):

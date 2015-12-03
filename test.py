@@ -698,6 +698,7 @@ class SimpleGlobTest1(unittest.TestCase):
         os.makedirs( fulldir )
         
   # ----------------------------------------
+
   def test_simple_globtest1(self):
     searchexpr = '(and (bookmark workarea)(attributes (areatype shots))(parameters (sequence 1*)))'
     foundlist = self.d.search_paths( searchexpr )
@@ -754,7 +755,6 @@ class SimpleGlobTest1(unittest.TestCase):
     )
     self.assertEqual( set(expected), set( x.path for x in foundlist ) )
 
-    
   # ----------------------------------------
   
   def test_simple_depict2(self):
@@ -786,6 +786,20 @@ class SimpleGlobTest1(unittest.TestCase):
       '/tmp/dirbtest4/projects/diehard',
     )
     self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+
+  # ----------------------------------------
+  
+  def test_simple_depict5(self):
+    createexpr = '(attributes (areatype assets))'
+    foundlist = self.d.depict_paths( createexpr )
+    self.assertEqual( foundlist, [] )
+    
+  # ----------------------------------------
+  
+  def test_simple_depict6(self):
+    createexpr = '(bookmark workarea)'
+    foundlist = self.d.depict_paths( createexpr )
+    self.assertEqual( foundlist, [] )
     
   # ----------------------------------------
       
