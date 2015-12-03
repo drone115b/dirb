@@ -18,6 +18,8 @@
 
 import itertools
 import functools 
+import fnmatch
+import operator
 
 from . import sexpr
 
@@ -175,20 +177,29 @@ def _create_pcollector_and( slist ):
 
 # -------------------------------------
 
-@_expose_search_path_op("parameters")  
-@_expose_create_path_op("parameters")  
-def _search_path_parameters( slist, pathctx ):
+def _search_path_parameters_base( slist, pathctx, fncmp ):
   valuedict = dict(slist[1:])
   for key in valuedict:
      if key in pathctx.parameters:
-       if valuedict[key] != pathctx.parameters[key] :
+       if fncmp( pathctx.parameters[key], valuedict[key] ) :
          return False
   return True
 
+@_expose_search_path_op("parameters")
+def _search_path_parameters( slist, pathctx ):
+  return _search_path_parameters_base( slist, pathctx, lambda a,b : not fnmatch.fnmatchcase(a,b) )
+
+@_expose_create_path_op("parameters")  
+def _create_path_parameters( slist, pathctx ):
+  return _search_path_parameters_base( slist, pathctx, operator.ne )
+
 @_expose_search_level_op("parameters")  
-@_expose_create_level_op("parameters")  
 def _search_lvl_parameters( slist, pathctx, levelctx ):
-  return _search_path_parameters( slist, pathctx )
+  return _search_path_parameters_base( slist, pathctx, lambda a,b : not fnmatch.fnmatchcase(a,b) )
+
+@_expose_create_level_op("parameters")  
+def _create_lvl_parameters( slist, pathctx, levelctx ):
+  return _search_path_parameters_base( slist, pathctx, operator.ne )
   
 @_expose_search_rule_op("parameters")
 @_expose_create_rule_op("parameters")
@@ -203,16 +214,11 @@ def _create_pcollector_parameters( slist ):
 
 @_expose_search_path_op("-parameters")   
 def _search_path_notparameters( slist, pathctx ):
-  valuedict = dict(slist[1:])
-  for key in valuedict:
-     if key in pathctx.parameters:
-       if valuedict[key] == pathctx.parameters[key] :
-         return False
-  return True
+  return _search_path_parameters_base( slist, pathctx, fnmatch.fnmatchcase )
 
 @_expose_search_level_op("-parameters")  
 def _search_lvl_notparameters( slist, pathctx, levelctx ):
-  return _search_path_notparameters( slist, pathctx )
+  return _search_path_parameters_base( slist, pathctx, fnmatch.fnmatchcase )
   
 @_expose_search_rule_op("-parameters")
 def _search_rule_notparameters( slist, rulectx ):
@@ -220,37 +226,44 @@ def _search_rule_notparameters( slist, rulectx ):
 
 # -------------------------------------
 
-@_expose_search_path_op("attributes")  
-def _search_path_attributes( slist, pathctx ):
+def _search_path_attributes_base( slist, pathctx, fncmp ):
   valuedict = dict(slist[1:])
   for key in valuedict:
      if key in pathctx.attributes:
-       if valuedict[key] != pathctx.attributes[key] :
+       if fncmp( pathctx.attributes[key], valuedict[key] ):
          return False
   return True
 
+@_expose_search_path_op("attributes")  
+def _search_path_attributes( slist, pathctx ):
+  return _search_path_attributes_base( slist, pathctx, lambda a,b : not fnmatch.fnmatchcase(a,b) )
+
+@_expose_create_path_op("attributes")  
+def _create_path_attributes( slist, pathctx ):
+  return _search_path_attributes_base( slist, pathctx, operator.ne )
+
 @_expose_search_level_op("attributes")  
 def _search_lvl_attributes( slist, pathctx, levelctx ):
-  return _search_path_attributes( slist, pathctx )
-  
+  return _search_path_attributes_base( slist, pathctx, lambda a,b : not fnmatch.fnmatchcase(a,b) )
+
+@_expose_create_level_op("attributes")  
+def _create_lvl_attributes( slist, pathctx, levelctx ):
+  return _search_path_attributes_base( slist, pathctx, operator.ne )
+
 @_expose_search_rule_op("attributes")
+@_expose_create_rule_op("attributes")
 def _search_rule_attributes( slist, rulectx ):
-  return any( x in rulectx.attributes for x in slist[1] )
+  return any( x in rulectx.attributes for x in (y[0] for y in slist[1:]) )
 
 # -------------------------------------
 
 @_expose_search_path_op("-attributes")  
 def _search_path_notattributes( slist, pathctx ):
-  valuedict = dict(slist[1:])
-  for key in valuedict:
-     if key in pathctx.attributes:
-       if valuedict[key] == pathctx.attributes[key] :
-         return False
-  return True
+  return _search_path_attributes_base( slist, pathctx, fnmatch.fnmatchcase )
 
 @_expose_search_level_op("-attributes")  
 def _search_lvl_notattributes( slist, pathctx, levelctx ):
-  return _search_path_notattributes( slist, pathctx )
+  return _search_path_attributes_base( slist, pathctx, fnmatch.fnmatchcase )
   
 @_expose_search_rule_op("-attributes")
 def _search_rule_notattributes( slist, rulectx ):
@@ -266,12 +279,12 @@ def _search_path_bookmark( slist, pathctx ):
 @_expose_search_level_op("bookmark")
 @_expose_create_level_op("bookmark")
 def _search_lvl_bookmark( slist, pathctx, levelctx ):
-  return slist[1] in levelctx.bookmarks
+  return any( fnmatch.fnmatchcase( x, slist[1] ) for x in levelctx.bookmarks )
 
 @_expose_search_rule_op("bookmark")
 @_expose_create_rule_op("bookmark")
 def _search_rule_bookmark( slist, rulectx ):
-  return slist[1] in rulectx.bookmarks
+  return any( fnmatch.fnmatchcase( x, slist[1] ) for x in rulectx.bookmarks )
 
 @_expose_create_pcollector_op( "bookmark" )  
 def _create_pcollector_bookmark( slist ):
@@ -285,7 +298,7 @@ def _search_path_notbookmark( slist, pathctx ):
 
 @_expose_search_level_op("-bookmark")
 def _search_lvl_notbookmark( slist, pathctx, levelctx ):
-  return slist[1] not in levelctx.bookmarks
+  return not any( fnmatch.fnmatchcase( x, slist[1] ) for x in levelctx.bookmarks )
 
 @_expose_search_rule_op("-bookmark")
 def _search_rule_notbookmark( slist, rulectx ):

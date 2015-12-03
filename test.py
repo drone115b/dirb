@@ -653,6 +653,99 @@ class SimpleNegativeOpsTest(unittest.TestCase):
 
 
 
+class SimpleGlobTest1(unittest.TestCase):
+
+  def setUp(self):
+    self.dirlist = (
+      'show/veh_car1/lighting',
+      'show/chr_bob/lighting',
+      'show/dontfind_blank/lighting',
+      'show/100x140/animation',
+      'show/100x140/lighting',
+      'show/100x140/dontfind',
+      'show/110x360/lighting',
+      'show/110x360/animation',
+      'show/110x570/animation',
+      'show/350x220/animation'
+      )
+    self.doc = ds.compile_dir_structure( { 
+      'collections' : {"department":["animation","lighting"], 'assettype':['veh','chr','set','prp']},
+      'rules' : {
+          
+        'ROOT' : [
+                ['ParameterizedLevel', { "bookmarks":["showroot"], "key":'show'}],
+                ['BranchLevel', {"rules":["sequence","asset"]}],
+            ],
+          
+          
+        'sequence' :[
+                ['FormattedLevel', { 'format': "{}x{}", "keys":['sequence','shot'] , 'treeattributes':{'areatype':'shots'}}],
+                ['ParameterizedLevel', { "key":'dept', "collection":"department", 'bookmarks':['workarea']}]
+            ],
+          
+          
+        'asset' : [
+                ['FormattedLevel', { 'format': "{}_{}", "keys":['assettype','assetname'] , 'collections':{'assettype':'assettype'}, 'bookmarks':['assetroot'], 'treeattributes':{'areatype':'assets'}}],
+                ['ParameterizedLevel', { "key":'dept', "collection":"department", 'bookmarks':['workarea']}]
+            ]
+        }
+    } )
+    self.rootdir = "/tmp/dirbtest4/projects"
+    self.d = localclient.LocalClient( self.doc, self.rootdir )
+    for d in self.dirlist:
+      fulldir = os.path.join( self.rootdir, d )
+      if not os.path.isdir( fulldir ):
+        os.makedirs( fulldir )
+        
+  # ----------------------------------------
+  def test_simple_globtest1(self):
+    searchexpr = '(and (bookmark workarea)(attributes (areatype shots))(parameters (sequence 1*)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/show/100x140/animation',
+      '/tmp/dirbtest4/projects/show/100x140/lighting',
+      '/tmp/dirbtest4/projects/show/110x360/lighting',
+      '/tmp/dirbtest4/projects/show/110x360/animation',
+      '/tmp/dirbtest4/projects/show/110x570/animation'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  
+  def test_simple_globtest2(self):
+    searchexpr = '(and (bookmark workarea)(-attributes (areatype s????)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/show/veh_car1/lighting',
+      '/tmp/dirbtest4/projects/show/chr_bob/lighting'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  
+  def test_simple_globtest3(self):
+    searchexpr = '(and (bookmark *area)(attributes (areatype assets)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/show/veh_car1/lighting',
+      '/tmp/dirbtest4/projects/show/chr_bob/lighting'
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  # ----------------------------------------
+  
+  def test_simple_globtest4(self):
+    searchexpr = '(and (bookmark workarea)(attributes (areatype shots))(-parameters (sequence 1*)))'
+    foundlist = self.d.search_paths( searchexpr )
+    expected = (
+      '/tmp/dirbtest4/projects/show/350x220/animation',
+    )
+    self.assertEqual( set(expected), set( x.path for x in foundlist ) )
+    
+  
+  def tearDown(self):
+    pass
+
 #####################################################################
 if __name__ == '__main__':
     unittest.main()
